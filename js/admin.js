@@ -439,5 +439,5 @@ window.Admin = (() => {
     }
   }
 
-  return { init, applyAdminUI, renderAdminView };
+  return { init, applyAdminUI, renderAdminView, syncEvalHistoryFromCommittee };
 })();
