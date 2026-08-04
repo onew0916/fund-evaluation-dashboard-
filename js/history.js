@@ -21,9 +21,7 @@ window.History = (() => {
   }
 
   function reflectedBadge(row) {
-    const val = (row.book_reflected || '').trim().toUpperCase();
-    if (val === 'Y') return `<span class="reflect-flag Y">장부가 반영완료</span>`;
-    return `<span class="reflect-flag unknown">반영 확인필요</span>`;
+    return Utils.bookReflectedBadge(row.book_reflected);
   }
 
   function toInputDate(str) {
@@ -117,8 +115,9 @@ window.History = (() => {
           <div class="form-row"><label>평가금액</label><input type="number" name="eval_amount" value="${r.eval_amount || ''}"></div>
           <div class="form-row"><label>장부가 반영여부</label>
             <select name="book_reflected">
-              <option value="N" ${(r.book_reflected || 'N').toUpperCase() !== 'Y' ? 'selected' : ''}>N (확인필요)</option>
-              <option value="Y" ${(r.book_reflected || '').toUpperCase() === 'Y' ? 'selected' : ''}>Y (반영완료)</option>
+              <option value="" ${!r.book_reflected ? 'selected' : ''}>공란 (확인필요)</option>
+              <option value="Y" ${(r.book_reflected || '').toUpperCase() === 'Y' ? 'selected' : ''}>Y (반영)</option>
+              <option value="N" ${(r.book_reflected || '').toUpperCase() === 'N' ? 'selected' : ''}>N (미반영)</option>
             </select>
           </div>
           <div class="form-row full"><label>특이사항</label><textarea name="notes">${Utils.escapeHtml(r.notes || '')}</textarea></div>

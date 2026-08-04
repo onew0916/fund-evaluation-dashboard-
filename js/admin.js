@@ -210,8 +210,9 @@ window.Admin = (() => {
             <div class="form-row"><label>평가금액</label><input type="number" name="eval_amount"></div>
             <div class="form-row"><label>장부가 반영여부</label>
               <select name="book_reflected">
-                <option value="N">N (확인필요)</option>
-                <option value="Y">Y (반영완료)</option>
+                <option value="" selected>공란 (확인필요)</option>
+                <option value="Y">Y (반영)</option>
+                <option value="N">N (미반영)</option>
               </select>
             </div>
             <div class="form-row full"><label>특이사항</label><textarea name="notes"></textarea></div>

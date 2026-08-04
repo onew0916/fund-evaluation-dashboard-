@@ -152,8 +152,8 @@ function addEvalHistory(row) {
   const sheet = getSheet(SHEET_NAMES.evalHistory);
   const header = getHeader(sheet);
 
-  // 장부가 반영여부는 명시적으로 오지 않으면 "확인필요(N)"로 생성한다.
-  if (!row.book_reflected) row.book_reflected = 'N';
+  // 장부가 반영여부는 명시적으로 오지 않으면 공란(확인필요)으로 생성한다.
+  if (row.book_reflected === undefined) row.book_reflected = '';
 
   const newRow = header.map(col => (row[col] !== undefined ? row[col] : ''));
   sheet.appendRow(newRow);

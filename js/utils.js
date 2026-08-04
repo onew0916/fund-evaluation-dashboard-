@@ -117,6 +117,14 @@ window.Utils = (() => {
     return (a > b * 1.15 || a < b) ? 'Y' : 'N';
   }
 
+  // ---- 평가이력 장부가 반영여부 배지 (Y=반영, N=미반영, 공란=확인필요) ----
+  function bookReflectedBadge(val) {
+    const v = (val || '').trim().toUpperCase();
+    if (v === 'Y') return `<span class="reflect-flag Y">장부가 반영</span>`;
+    if (v === 'N') return `<span class="reflect-flag N">장부가 미반영</span>`;
+    return `<span class="reflect-flag unknown">확인필요</span>`;
+  }
+
   function escapeHtml(str) {
     if (str === null || str === undefined) return '';
     return String(str)
@@ -131,7 +139,7 @@ window.Utils = (() => {
 
   return {
     parseCSV, parseDate, today, diffDays, formatDate, ddayLabel,
-    formatNumber, formatKRW, statusBadge, calcReflectRequired,
+    formatNumber, formatKRW, statusBadge, calcReflectRequired, bookReflectedBadge,
     escapeHtml, debounce, toNumber
   };
 })();

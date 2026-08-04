@@ -185,10 +185,7 @@ window.Panel = (() => {
   }
 
   function historyReflectedFlag(r) {
-    const val = (r.book_reflected || '').trim().toUpperCase();
-    return val === 'Y'
-      ? `<span class="reflect-flag Y">장부가 반영완료</span>`
-      : `<span class="reflect-flag unknown">반영 확인필요</span>`;
+    return Utils.bookReflectedBadge(r.book_reflected);
   }
 
   function renderAssetModalHistory(fund, asset) {
@@ -311,7 +308,7 @@ window.Panel = (() => {
 
   // 보유자산의 평가금액/최근평가일(=평가기준일)이 입력되면 평가이력(eval_history)에도 자동으로 반영한다.
   // - 같은 펀드/자산에 대해 동일한 평가기준일의 이력이 이미 있으면 그 행을 갱신
-  // - 없으면 새 이력 행을 추가 (장부가 반영여부는 일단 N으로 생성 - 실제 반영 여부는 평가이력 탭에서 관리자가 확인 후 Y로 전환)
+  // - 없으면 새 이력 행을 추가 (장부가 반영여부는 일단 공란(확인필요)으로 생성 - 실제 반영 여부는 평가이력 탭에서 관리자가 확인 후 Y/N으로 전환)
   async function syncEvalHistorySnapshot(fund, asset, fields) {
     if (!fields.eval_amount) return; // 평가금액이 입력된 경우에만 이력에 반영
     const baseDate = fields.last_eval_date || '';
@@ -332,7 +329,7 @@ window.Panel = (() => {
         asset_name: asset.asset_name,
         eval_base_date: baseDate,
         eval_amount: fields.eval_amount,
-        book_reflected: 'N',
+        book_reflected: '',
         notes: '대시보드 보유자산 정보 갱신 시 자동 생성'
       });
     }
