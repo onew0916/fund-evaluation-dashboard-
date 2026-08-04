@@ -1,12 +1,16 @@
 /**
  * 집합투자재산평가위원회 개최이력 뷰
  * committee_history 시트: no, session_no, meeting_date, agenda, target_funds, target_assets,
- *   resolution, attendees, remark, reflected(Y/N, 대시보드 반영여부), impair_yn(Y/N, 부실분류 여부),
- *   impair_level(부실우려/발생/개선/악화 - impair_yn=Y일 때만 의미있음)
+ *   resolution, attendees, remark, reflected(Y=장부가반영/N=장부가미반영/공란=확인필요, 장부가 반영여부),
+ *   eval_conducted(Y/N, 평가시행 여부), eval_amount(평가시행여부=Y일 때만 의미있음),
+ *   impair_yn(Y/N, 부실분류 여부), impair_level(부실우려/발생/개선/악화 - impair_yn=Y일 때만 의미있음)
  *
  * 부실분류는 반드시 평가위원회 의결을 통해서만 이루어진다는 원칙에 따라, 부실분류 여부/단계는
  * 이 시트에서만 입력한다. 다만 실제 펀드/자산의 부실분류(impair) 필드 반영은 (다른 필드들과 동일하게)
  * 항상 자산 대시보드의 관리자 입력을 통해서만 이루어진다 - 위원회 이력에서 자동으로 값을 밀어넣지 않는다.
+ *
+ * 평가시행여부=Y인 건은 이 위원회 개최일이 대상 자산(들)의 평가기준일이 되며, admin.js에서
+ * 위원회 이력 저장 시 대상 펀드×자산 조합 전체에 동일한 평가금액으로 eval_history에도 함께 반영한다.
  */
 window.CommitteeView = (() => {
   let state = null;
@@ -27,9 +31,12 @@ window.CommitteeView = (() => {
   }
 
   function reflectedBadge(r) {
-    const val = (r.reflected || '').trim().toUpperCase();
-    if (val === 'Y') return `<span class="badge" style="color:#16a34a;background:#e8f7ee;border:1px solid #16a34a33;">대시보드 반영완료</span>`;
-    return `<span class="badge" style="color:#ea580c;background:#fef1e6;border:1px solid #ea580c33;">반영 확인필요</span>`;
+    return Utils.bookReflectedBadge(r.reflected);
+  }
+
+  function evalConductedBadge(r) {
+    if ((r.eval_conducted || '').trim().toUpperCase() !== 'Y') return '';
+    return `<span class="badge" style="color:#2563eb;background:#eaf1fd;border:1px solid #2563eb33;">평가시행</span>`;
   }
 
   function impairBadge(r) {
@@ -100,7 +107,7 @@ window.CommitteeView = (() => {
         <div class="hf-head">
           <span class="code">${Utils.formatDate(r.meeting_date)}</span>
           <h3>${Utils.escapeHtml(r.session_no || '(회차 미상)')}</h3>
-          <span style="display:flex;gap:6px;flex-wrap:wrap;margin-left:auto;">${reflectedBadge(r)}${impairBadge(r)}</span>
+          <span style="display:flex;gap:6px;flex-wrap:wrap;margin-left:auto;">${evalConductedBadge(r)}${reflectedBadge(r)}${impairBadge(r)}</span>
         </div>
         <div class="detail-grid" style="margin-bottom:10px;">
           <div class="detail-item full">
@@ -120,6 +127,11 @@ window.CommitteeView = (() => {
             <div class="k">의결내용</div>
             <div class="v" style="font-weight:500;">${Utils.escapeHtml(r.resolution || '-')}</div>
           </div>
+          ${(r.eval_conducted || '').trim().toUpperCase() === 'Y' ? `
+          <div class="detail-item">
+            <div class="k">평가금액 (평가기준일 = 개최일)</div>
+            <div class="v" style="font-weight:500;">${Utils.formatKRW(r.eval_amount)}</div>
+          </div>` : ''}
           <div class="detail-item">
             <div class="k">참석위원</div>
             <div class="v" style="font-weight:500;">${Utils.escapeHtml(r.attendees || '-')}</div>
@@ -130,41 +142,43 @@ window.CommitteeView = (() => {
             <div class="v" style="font-weight:400;color:var(--text-500);">${Utils.escapeHtml(r.remark)}</div>
           </div>` : ''}
         </div>
-        ${state.isAdmin ? renderReflectToggle(r, idx) : ''}
+        ${state.isAdmin ? renderReflectSelect(r, idx) : ''}
       </div>
     `).join('');
 
-    if (state.isAdmin) bindReflectToggles();
+    if (state.isAdmin) bindReflectSelects();
   }
 
-  function renderReflectToggle(r, idx) {
+  function renderReflectSelect(r, idx) {
     const val = (r.reflected || '').trim().toUpperCase();
-    const nextVal = val === 'Y' ? 'N' : 'Y';
-    const label = val === 'Y' ? '반영 확인필요로 표시' : '대시보드 반영완료로 표시';
     return `
-      <div class="btn-row" style="margin-top:2px;">
-        <button class="btn btn-secondary reflect-toggle-btn" data-ch-idx="${idx}" data-next="${nextVal}" style="padding:5px 10px;font-size:12px;">${label}</button>
+      <div class="form-row" style="max-width:220px;margin-top:2px;">
+        <label style="font-size:11px;">장부가 반영여부</label>
+        <select class="reflect-select" data-ch-idx="${idx}">
+          <option value="" ${!val ? 'selected' : ''}>공란 (확인필요)</option>
+          <option value="Y" ${val === 'Y' ? 'selected' : ''}>Y (반영)</option>
+          <option value="N" ${val === 'N' ? 'selected' : ''}>N (미반영)</option>
+        </select>
       </div>
     `;
   }
 
-  function bindReflectToggles() {
-    document.querySelectorAll('.reflect-toggle-btn').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const idx = Number(btn.dataset.chIdx);
+  function bindReflectSelects() {
+    document.querySelectorAll('.reflect-select').forEach(sel => {
+      sel.addEventListener('change', async () => {
+        const idx = Number(sel.dataset.chIdx);
         const original = state.data.committeeHistory[idx];
-        const next = btn.dataset.next;
-        btn.disabled = true; btn.textContent = '저장 중…';
+        sel.disabled = true;
         try {
           await Api.updateCommitteeHistory(
             { session_no: original.session_no, meeting_date: original.meeting_date, agenda: original.agenda },
-            { reflected: next }
+            { reflected: sel.value }
           );
-          App.showToast('반영여부가 저장되었습니다.', 'success');
+          App.showToast('장부가 반영여부가 저장되었습니다.', 'success');
           await App.reloadData();
         } catch (err) {
           App.showToast(err.message, 'error');
-          btn.disabled = false;
+          sel.disabled = false;
         }
       });
     });

@@ -5,6 +5,13 @@ window.Admin = (() => {
   let state = null;
   let pendingUpload = null; // { sheetName, rows }
 
+  // 특정 펀드가 보유 중인 자산명 목록 (asset_detail 기준)
+  function assetNamesForFund(fundCode) {
+    return (state.data.assetDetail || [])
+      .filter(a => a.fund_code === fundCode)
+      .map(a => a.asset_name);
+  }
+
   function init(appState) {
     state = appState;
 
@@ -220,13 +227,15 @@ window.Admin = (() => {
   function renderEvalHistoryForm() {
     const funds = state.data.fundMaster;
     const options = funds.map(f => `<option value="${Utils.escapeHtml(f.fund_code)}">${Utils.escapeHtml(f.fund_code)} · ${Utils.escapeHtml(f.fund_name)}</option>`).join('');
+    const firstCode = funds[0] ? funds[0].fund_code : '';
+    const assetOptions = assetNamesForFund(firstCode).map(n => `<option value="${Utils.escapeHtml(n)}">${Utils.escapeHtml(n)}</option>`).join('');
     return `
       <div class="table-card" style="padding:18px;">
         <div class="section-title">평가이력 입력</div>
         <form id="evalHistoryForm">
           <div class="detail-grid">
-            <div class="form-row full"><label>펀드</label><select name="fund_code">${options}</select></div>
-            <div class="form-row full"><label>자산명</label><input name="asset_name" required></div>
+            <div class="form-row full"><label>펀드</label><select name="fund_code" id="evalHistoryFundSelect">${options}</select></div>
+            <div class="form-row full"><label>자산명</label><select name="asset_name" id="evalHistoryAssetSelect" required>${assetOptions}</select></div>
             <div class="form-row"><label>평가기준일</label><input type="date" name="eval_base_date" required></div>
             <div class="form-row"><label>평가금액</label><input type="number" name="eval_amount"></div>
             <div class="form-row"><label>장부가 반영여부</label>
@@ -247,6 +256,16 @@ window.Admin = (() => {
   function bindEvalHistoryForm() {
     const form = document.getElementById('evalHistoryForm');
     if (!form) return;
+
+    const fundSelect = document.getElementById('evalHistoryFundSelect');
+    const assetSelect = document.getElementById('evalHistoryAssetSelect');
+    if (fundSelect && assetSelect) {
+      fundSelect.addEventListener('change', () => {
+        assetSelect.innerHTML = assetNamesForFund(fundSelect.value)
+          .map(n => `<option value="${Utils.escapeHtml(n)}">${Utils.escapeHtml(n)}</option>`).join('');
+      });
+    }
+
     form.addEventListener('submit', async e => {
       e.preventDefault();
       const btn = form.querySelector('button[type="submit"]');
@@ -269,6 +288,8 @@ window.Admin = (() => {
   // ---- 위원회 개최 이력 입력 ----
   // 부실분류는 반드시 평가위원회 의결을 통해서만 이루어지므로, 부실분류 여부/단계는 이 폼에서만 입력한다.
   // (단, 실제 펀드/자산의 부실분류 필드 반영은 다른 항목과 동일하게 항상 자산 대시보드에서 수행한다.)
+  // 평가시행여부(eval_conducted)=Y인 경우: 이 위원회 개최일이 대상 자산(들)의 평가기준일이 되며,
+  // 입력한 평가금액은 대상 펀드×자산 조합 전체에 동일하게 적용되어 eval_history에도 함께 반영된다.
   function renderCommitteeForm() {
     const funds = state.data.fundMaster;
     const datalistOptions = funds.map(f => `<option value="${Utils.escapeHtml(f.fund_code)}">${Utils.escapeHtml(f.fund_name)}</option>`).join('');
@@ -284,11 +305,25 @@ window.Admin = (() => {
             <div class="form-row full"><label>안건</label><textarea name="agenda" placeholder="예: 대체평가 대상 펀드 적용기간 연장 건"></textarea></div>
             <div class="form-row full">
               <label>대상 펀드 (펀드코드, 콤마로 여러 개 구분)</label>
-              <input name="target_funds" list="fundCodeDatalist" placeholder="예: 100150, 100181">
+              <input name="target_funds" id="committeeFundsInput" list="fundCodeDatalist" placeholder="예: 100150, 100181">
               <datalist id="fundCodeDatalist">${datalistOptions}</datalist>
             </div>
-            <div class="form-row full"><label>대상 자산 (선택, 콤마로 여러 개 구분)</label><input name="target_assets" placeholder="자산명 또는 - "></div>
+            <div class="form-row full">
+              <label>대상 자산 (선택, 콤마로 여러 개 구분)</label>
+              <input name="target_assets" id="committeeAssetsInput" list="committeeAssetDatalist" placeholder="자산명 또는 - (대상 펀드 입력 시 보유자산 목록이 자동완성됩니다)">
+              <datalist id="committeeAssetDatalist"></datalist>
+            </div>
             <div class="form-row full"><label>의결내용</label><textarea name="resolution" placeholder="예: 원안 가결"></textarea></div>
+            <div class="form-row"><label>평가시행 여부</label>
+              <select name="eval_conducted" id="committeeEvalConductedYn">
+                <option value="N" selected>N (평가미시행)</option>
+                <option value="Y">Y (평가시행)</option>
+              </select>
+            </div>
+            <div class="form-row" id="committeeEvalAmountRow" style="display:none;">
+              <label>평가금액</label>
+              <input type="number" name="eval_amount" id="committeeEvalAmountInput">
+            </div>
             <div class="form-row"><label>부실분류 여부</label>
               <select name="impair_yn" id="committeeImpairYn">
                 <option value="N">N (해당없음)</option>
@@ -299,10 +334,11 @@ window.Admin = (() => {
               <label>부실단계</label>
               <select name="impair_level">${impairOptions}</select>
             </div>
-            <div class="form-row"><label>대시보드 반영여부</label>
+            <div class="form-row"><label>장부가 반영여부</label>
               <select name="reflected">
-                <option value="N">N (반영 확인필요)</option>
-                <option value="Y">Y (반영완료)</option>
+                <option value="" selected>공란 (확인필요)</option>
+                <option value="Y">Y (반영)</option>
+                <option value="N">N (미반영)</option>
               </select>
             </div>
             <div class="form-row full"><label>참석위원</label><input name="attendees"></div>
@@ -326,6 +362,25 @@ window.Admin = (() => {
       });
     }
 
+    const evalConductedSelect = document.getElementById('committeeEvalConductedYn');
+    const evalAmountRow = document.getElementById('committeeEvalAmountRow');
+    if (evalConductedSelect) {
+      evalConductedSelect.addEventListener('change', () => {
+        evalAmountRow.style.display = evalConductedSelect.value === 'Y' ? '' : 'none';
+      });
+    }
+
+    const fundsInput = document.getElementById('committeeFundsInput');
+    const assetDatalist = document.getElementById('committeeAssetDatalist');
+    if (fundsInput && assetDatalist) {
+      fundsInput.addEventListener('input', () => {
+        const codes = fundsInput.value.split(',').map(s => s.trim()).filter(Boolean);
+        const names = new Set();
+        codes.forEach(c => assetNamesForFund(c).forEach(n => names.add(n)));
+        assetDatalist.innerHTML = [...names].map(n => `<option value="${Utils.escapeHtml(n)}"></option>`).join('');
+      });
+    }
+
     form.addEventListener('submit', async e => {
       e.preventDefault();
       const btn = form.querySelector('button[type="submit"]');
@@ -333,10 +388,16 @@ window.Admin = (() => {
       const fd = new FormData(form);
       const row = Object.fromEntries(fd.entries());
       if (row.impair_yn !== 'Y') row.impair_level = '';
+      if (row.eval_conducted !== 'Y') row.eval_amount = '';
       try {
         await Api.addCommitteeHistory(row);
+        if (row.eval_conducted === 'Y' && row.eval_amount) {
+          await syncEvalHistoryFromCommittee(row);
+        }
         App.showToast('위원회 개최이력이 추가되었습니다.', 'success');
         form.reset();
+        evalAmountRow.style.display = 'none';
+        impairLevelRow.style.display = 'none';
         await App.reloadData();
       } catch (err) {
         App.showToast(err.message, 'error');
@@ -344,6 +405,38 @@ window.Admin = (() => {
         btn.disabled = false; btn.textContent = '위원회 이력 추가';
       }
     });
+  }
+
+  // 평가시행여부=Y로 제출된 위원회 이력을 eval_history에도 반영 (대상 펀드×자산 조합 전체에 동일 금액 적용)
+  async function syncEvalHistoryFromCommittee(row) {
+    const fundCodes = (row.target_funds || '').split(',').map(s => s.trim()).filter(Boolean);
+    const assetNames = (row.target_assets || '').split(',').map(s => s.trim()).filter(Boolean);
+    if (!fundCodes.length || !assetNames.length) {
+      App.showToast('평가시행 건이지만 대상 펀드/자산이 비어있어 평가이력에는 반영되지 않았습니다.', 'error');
+      return;
+    }
+    for (const fundCode of fundCodes) {
+      for (const assetName of assetNames) {
+        const existing = (state.data.evalHistory || []).find(h =>
+          h.fund_code === fundCode && h.asset_name === assetName && h.eval_base_date === row.meeting_date
+        );
+        if (existing) {
+          await Api.updateEvalHistory(
+            { fund_code: existing.fund_code, asset_name: existing.asset_name, eval_base_date: existing.eval_base_date },
+            { eval_amount: row.eval_amount, book_reflected: row.reflected }
+          );
+        } else {
+          await Api.addEvalHistory({
+            fund_code: fundCode,
+            asset_name: assetName,
+            eval_base_date: row.meeting_date,
+            eval_amount: row.eval_amount,
+            book_reflected: row.reflected,
+            notes: `위원회 개최이력(${row.session_no || row.meeting_date}) 의결에 따른 평가 반영`
+          });
+        }
+      }
+    }
   }
 
   return { init, applyAdminUI, renderAdminView };
