@@ -1,0 +1,10 @@
+{
+  "name": "asset-eval-dashboard-smoke-test",
+  "private": true,
+  "scripts": {
+    "test": "node smoke_test.js"
+  },
+  "devDependencies": {
+    "jsdom": "^25.0.0"
+  }
+}

@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>자산평가 현황 관리 | 코람코자산운용 펀드관리팀</title>
+<link rel="stylesheet" href="css/style.css?v=17">
+</head>
+<body>
+
+<div class="app-shell">
+
+  <!-- ================= 사이드바 ================= -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="co">코람코자산운용 · 펀드관리팀</div>
+      <div class="title">자산평가 현황 관리</div>
+    </div>
+
+    <nav class="nav">
+      <button class="nav-item active" data-view="dashboard">
+        <span class="dot"></span> 대시보드
+      </button>
+      <button class="nav-item" data-view="history">
+        <span class="dot"></span> 평가이력
+      </button>
+      <button class="nav-item" data-view="committee">
+        <span class="dot"></span> 위원회 이력
+      </button>
+      <button class="nav-item" data-view="admin" id="navAdminBtn" style="display:none;">
+        <span class="dot"></span> 관리자 도구
+      </button>
+    </nav>
+
+    <div class="sidebar-footer">
+      <button class="admin-toggle" id="adminToggleBtn">
+        <span id="adminToggleLabel">관리자 모드</span>
+        <span id="adminToggleState">OFF</span>
+      </button>
+      <div class="meta-line" id="baseDateLine">기준일 -</div>
+      <div class="meta-line" id="lastSyncLine">마지막 동기화 -</div>
+    </div>
+  </aside>
+
+  <!-- ================= 메인 ================= -->
+  <main class="main">
+
+    <!-- ---- 대시보드 뷰 ---- -->
+    <section id="view-dashboard" class="view">
+      <div class="main-header">
+        <div>
+          <h1>펀드 자산평가 현황 <span class="base-date-badge today-badge" id="todayBadge">오늘 -</span><span class="base-date-badge" id="baseDateBadge">기준일 -</span></h1>
+          <div class="sub">Google Sheets 연동 · 실시간 조회</div>
+        </div>
+        <div class="header-right">
+          <button class="refresh-btn" id="exportBtn">⭳ 엑셀 다운로드</button>
+          <button class="refresh-btn" id="refreshBtn">⟳ 새로고침</button>
+        </div>
+      </div>
+
+      <div class="kpi-row" id="kpiRow"><!-- KPI 카드 4개: JS 렌더 --></div>
+
+      <div class="filter-bar">
+        <input type="text" id="searchInput" placeholder="펀드명 · 펀드코드 · 자산명 · 팀 검색">
+        <button class="chip active" data-filter="ALL">전체</button>
+        <button class="chip" data-filter="대체평가">대체평가</button>
+        <button class="chip" data-filter="외부평가 대상">외부평가 대상</button>
+        <button class="chip" data-filter="시가평가">시가평가</button>
+        <div class="spacer"></div>
+        <div class="result-count" id="resultCount"></div>
+      </div>
+
+      <div class="table-card" id="tableCard">
+        <table class="fund-table">
+          <thead>
+            <tr>
+              <th data-sort="fund_code">펀드코드<span class="sort-arrow"></span></th>
+              <th data-sort="fund_name">펀드명<span class="sort-arrow"></span></th>
+              <th data-sort="asset_name">자산명<span class="sort-arrow"></span></th>
+              <th data-sort="asset_type">자산종류<span class="sort-arrow"></span></th>
+              <th data-sort="listed">시장성/비시장성<span class="sort-arrow"></span></th>
+              <th data-sort="eval_status">평가규칙<span class="sort-arrow"></span></th>
+              <th data-sort="alt_reason">평가근거<span class="sort-arrow"></span></th>
+              <th data-sort="eval_recency">평가상태<span class="sort-arrow"></span></th>
+              <th data-sort="book_value">장부가<span class="sort-arrow"></span></th>
+              <th data-sort="eval_amount">평가액<span class="sort-arrow"></span></th>
+              <th data-sort="prev_dt">직전평가시행일<span class="sort-arrow"></span></th>
+              <th data-sort="apply_end">평가적용종료일<span class="sort-arrow"></span></th>
+              <th data-sort="impair">부실분류<span class="sort-arrow"></span></th>
+            </tr>
+          </thead>
+          <tbody id="fundTableBody">
+            <tr><td colspan="13" class="empty-state">데이터를 불러오는 중입니다…</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="hscroll-track" id="hscrollTrack"><div class="hscroll-thumb" id="hscrollThumb"></div></div>
+    </section>
+
+    <!-- ---- 평가이력 뷰 ---- -->
+    <section id="view-history" class="view" style="display:none;">
+      <div class="main-header">
+        <div>
+          <h1>평가이력 타임라인</h1>
+          <div class="sub">외부평가 대상 펀드 · 감평의뢰 → 감평수령 → 집투평의결 → 장부가반영</div>
+        </div>
+        <div class="header-right">
+          <button class="refresh-btn" id="refreshBtn2">⟳ 새로고침</button>
+        </div>
+      </div>
+      <div id="historyContainer"><div class="empty-state">데이터를 불러오는 중입니다…</div></div>
+    </section>
+
+    <!-- ---- 위원회 이력 뷰 ---- -->
+    <section id="view-committee" class="view" style="display:none;">
+      <div class="main-header">
+        <div>
+          <h1>집합투자재산평가위원회 개최이력</h1>
+          <div class="sub">회차별 안건 · 대상펀드 · 의결내용 · 참석위원</div>
+        </div>
+        <div class="header-right">
+          <button class="refresh-btn" id="refreshBtn3">⟳ 새로고침</button>
+        </div>
+      </div>
+      <div id="committeeContainer"><div class="empty-state">데이터를 불러오는 중입니다…</div></div>
+    </section>
+
+    <!-- ---- 관리자 도구 뷰 ---- -->
+    <section id="view-admin" class="view" style="display:none;">
+      <div class="main-header">
+        <div>
+          <h1>관리자 도구</h1>
+          <div class="sub">CSV 업로드 · 평가방법 관리 · 외부평가 이력 입력</div>
+        </div>
+      </div>
+      <div id="adminContainer"></div>
+    </section>
+
+  </main>
+</div>
+
+<!-- ================= 우측 사이드 패널 ================= -->
+<div class="side-panel-overlay" id="panelOverlay"></div>
+<div class="side-panel" id="sidePanel">
+  <div class="side-panel-header">
+    <div>
+      <div class="fund-code" id="panelFundCode">-</div>
+      <h2 id="panelFundName">-</h2>
+      <span class="team-tag" id="panelFundTeam"></span>
+    </div>
+    <button class="close-btn" id="panelCloseBtn">✕</button>
+  </div>
+  <div class="side-panel-tabs">
+    <button class="side-panel-tab active" data-ptab="detail">펀드 상세</button>
+    <button class="side-panel-tab" data-ptab="assets">보유자산</button>
+  </div>
+  <div class="side-panel-body" id="panelBody"><!-- JS 렌더 --></div>
+</div>
+
+<!-- ================= 관리자 로그인 모달 ================= -->
+<div class="modal-overlay" id="adminModal" style="display:none;">
+  <div class="modal-box">
+    <h3>관리자 모드</h3>
+    <div class="sub">비밀번호를 입력하면 데이터 수정 기능이 활성화됩니다.</div>
+    <div class="form-row">
+      <label>비밀번호</label>
+      <input type="password" id="adminPasswordInput" placeholder="••••••••">
+    </div>
+    <div class="error-msg" id="adminErrorMsg"></div>
+    <div class="btn-row">
+      <button class="btn btn-primary" id="adminSubmitBtn">확인</button>
+      <button class="btn btn-secondary" id="adminCancelBtn">취소</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= 보유자산 상세 모달 (자산상세내역 / 평가이력 / 위원회 개최이력) ================= -->
+<div class="modal-overlay" id="assetDetailModal" style="display:none;">
+  <div class="modal-box asset-detail-modal">
+    <div class="asset-modal-header">
+      <h3 id="assetModalTitle">-</h3>
+      <button class="close-btn" id="assetModalCloseBtn">✕</button>
+    </div>
+    <div class="side-panel-tabs" id="assetModalTabs">
+      <button class="side-panel-tab active" data-amtab="detail">자산상세내역</button>
+      <button class="side-panel-tab" data-amtab="history">평가이력</button>
+      <button class="side-panel-tab" data-amtab="committee">위원회 개최이력</button>
+    </div>
+    <div class="asset-modal-body" id="assetModalBody"><!-- JS 렌더 --></div>
+  </div>
+</div>
+
+<!-- ================= 토스트 ================= -->
+<div class="toast" id="toast"></div>
+
+<script src="js/config.js?v=17"></script>
+<script src="js/utils.js?v=17"></script>
+<script src="js/api.js?v=17"></script>
+<script src="js/dashboard.js?v=17"></script>
+<script src="js/panel.js?v=17"></script>
+<script src="js/history.js?v=17"></script>
+<script src="js/committee.js?v=17"></script>
+<script src="js/admin.js?v=17"></script>
+<script src="js/main.js?v=17"></script>
+</body>
+</html>

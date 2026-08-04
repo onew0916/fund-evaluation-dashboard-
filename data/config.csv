@@ -1,0 +1,7 @@
+﻿key,value,description
+base_date,2026-06-16,기준일
+legal_deadline,2026-09-18,법정 평가기한
+alt_decision_dt,2025-12-17,대체평가 의결일
+alt_apply_start,2025-09-19,대체평가 적용 시작
+alt_apply_end,2026-09-18,대체평가 적용 종료
+version,v1.0,데이터 버전
