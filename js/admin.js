@@ -149,40 +149,61 @@ window.Admin = (() => {
     });
   }
 
-  // ---- 평가방법 관리 ----
+  // ---- 평가방법 관리 (대체평가 대상 "자산" 단위 - eval_status는 펀드가 아니라 자산 속성) ----
   function renderMethodSection() {
-    const funds = state.data.fundMaster.filter(f => f.eval_status === '대체평가');
+    const assets = (state.data.assetDetail || [])
+      .filter(a => a.eval_status === '대체평가')
+      .slice()
+      .sort((a, b) => String(a.fund_code).localeCompare(String(b.fund_code)));
+    const rowsHtml = assets.map(a => {
+      const fund = (state.data.fundMaster || []).find(f => f.fund_code === a.fund_code);
+      return `
+        <tr data-fund-code="${Utils.escapeHtml(a.fund_code)}">
+          <td class="mono">${Utils.escapeHtml(a.fund_code)}</td>
+          <td class="fund-name">${Utils.escapeHtml(fund ? fund.fund_name : '')}</td>
+          <td>${Utils.escapeHtml(a.asset_name)}</td>
+          <td><input class="method-reason-input" data-code="${Utils.escapeHtml(a.fund_code)}" data-asset="${Utils.escapeHtml(a.asset_name)}" value="${Utils.escapeHtml(a.alt_reason || '')}" style="width:100%;border:1px solid var(--border);border-radius:4px;padding:5px 7px;"></td>
+          <td><input class="method-input" data-code="${Utils.escapeHtml(a.fund_code)}" data-asset="${Utils.escapeHtml(a.asset_name)}" value="${Utils.escapeHtml(a.alt_method || '')}" style="width:100%;border:1px solid var(--border);border-radius:4px;padding:5px 7px;"></td>
+          <td><button class="btn btn-secondary method-save-btn" data-code="${Utils.escapeHtml(a.fund_code)}" data-asset="${Utils.escapeHtml(a.asset_name)}" style="padding:5px 10px;">저장</button></td>
+        </tr>
+      `;
+    }).join('');
     return `
       <div class="table-card" style="padding:18px;margin-bottom:18px;">
-        <div class="section-title">대체평가 방법 관리 (${funds.length}개 펀드)</div>
-        <table class="fund-table">
-          <thead><tr><th>펀드코드</th><th>펀드명</th><th>대체평가근거</th><th>대체평가방법</th><th></th></tr></thead>
-          <tbody>
-            ${funds.map(f => `
-              <tr>
-                <td class="mono">${Utils.escapeHtml(f.fund_code)}</td>
-                <td class="fund-name">${Utils.escapeHtml(f.fund_name)}</td>
-                <td><input class="method-reason-input" data-code="${Utils.escapeHtml(f.fund_code)}" value="${Utils.escapeHtml(f.alt_reason || '')}" style="width:100%;border:1px solid var(--border);border-radius:4px;padding:5px 7px;"></td>
-                <td><input class="method-input" data-code="${Utils.escapeHtml(f.fund_code)}" value="${Utils.escapeHtml(f.alt_method || '')}" style="width:100%;border:1px solid var(--border);border-radius:4px;padding:5px 7px;"></td>
-                <td><button class="btn btn-secondary method-save-btn" data-code="${Utils.escapeHtml(f.fund_code)}" style="padding:5px 10px;">저장</button></td>
-              </tr>
-            `).join('')}
-          </tbody>
+        <div class="section-title">대체평가 방법 관리 (${assets.length}개 자산)</div>
+        <div class="form-row" style="max-width:260px;margin-bottom:10px;">
+          <label>펀드코드 검색</label>
+          <input id="methodSearchInput" placeholder="펀드코드로 검색">
+        </div>
+        <table class="fund-table" id="methodTable">
+          <thead><tr><th>펀드코드</th><th>펀드명</th><th>자산명</th><th>대체평가근거</th><th>대체평가방법</th><th></th></tr></thead>
+          <tbody>${rowsHtml}</tbody>
         </table>
       </div>
     `;
   }
 
   function bindMethodSection() {
+    const searchInput = document.getElementById('methodSearchInput');
+    if (searchInput) {
+      searchInput.addEventListener('input', () => {
+        const q = searchInput.value.trim();
+        document.querySelectorAll('#methodTable tbody tr').forEach(tr => {
+          tr.style.display = tr.dataset.fundCode.includes(q) ? '' : 'none';
+        });
+      });
+    }
+
     document.querySelectorAll('.method-save-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
         const code = btn.dataset.code;
-        const reason = document.querySelector(`.method-reason-input[data-code="${CSS.escape(code)}"]`).value;
-        const method = document.querySelector(`.method-input[data-code="${CSS.escape(code)}"]`).value;
+        const assetName = btn.dataset.asset;
+        const reason = document.querySelector(`.method-reason-input[data-code="${CSS.escape(code)}"][data-asset="${CSS.escape(assetName)}"]`).value;
+        const method = document.querySelector(`.method-input[data-code="${CSS.escape(code)}"][data-asset="${CSS.escape(assetName)}"]`).value;
         btn.disabled = true; btn.textContent = '저장 중…';
         try {
-          await Api.updateFund(code, { alt_reason: reason, alt_method: method });
-          App.showToast(`${code} 평가방법이 저장되었습니다.`, 'success');
+          await Api.updateAsset(code, assetName, { alt_reason: reason, alt_method: method });
+          App.showToast(`${code} / ${assetName} 평가방법이 저장되었습니다.`, 'success');
           await App.reloadData();
         } catch (err) {
           App.showToast(err.message, 'error');

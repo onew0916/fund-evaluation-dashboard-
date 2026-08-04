@@ -64,7 +64,6 @@ window.History = (() => {
           <div class="hf-head">
             <span class="code">${Utils.escapeHtml(code)}</span>
             <h3>${Utils.escapeHtml(fund ? fund.fund_name : '(펀드정보 없음)')}</h3>
-            ${fund ? Utils.statusBadge(fund.eval_status) : ''}
           </div>
           ${years.map(y => `
             <div class="year-block">
