@@ -4,6 +4,7 @@
 window.Admin = (() => {
   let state = null;
   let pendingUpload = null; // { sheetName, rows }
+  let monthlyResult = null; // MonthlyMerge.run()의 결과 (미리보기 -> 반영 사이 보관)
 
   // 특정 펀드가 보유 중인 자산명 목록 (asset_detail 기준)
   function assetNamesForFund(fundCode) {
@@ -73,15 +74,141 @@ window.Admin = (() => {
   function renderAdminView() {
     const container = document.getElementById('adminContainer');
     container.innerHTML = `
+      ${renderMonthlyUpdateSection()}
       ${renderUploadSection()}
       ${renderMethodSection()}
       ${renderEvalHistoryForm()}
       ${renderCommitteeForm()}
     `;
+    bindMonthlyUpdateSection();
     bindUploadSection();
     bindMethodSection();
     bindEvalHistoryForm();
     bindCommitteeForm();
+  }
+
+  // ---- 월간 데이터 반영 (펀드현황/자산현황 xlsx 업로드 -> 비교 미리보기 -> 반영) ----
+  function renderMonthlyUpdateSection() {
+    return `
+      <div class="table-card" style="padding:18px;margin-bottom:18px;">
+        <div class="section-title">월간 데이터 반영</div>
+        <div class="sub" style="margin-bottom:10px;">이번 달 펀드현황(펀드정보3)·자산현황(명세부) xlsx를 올리면 현재 시트와 비교해 변경/신규/제외 내역을 미리 보여줍니다. 클래스펀드는 자동으로 제외됩니다.</div>
+        <div class="detail-grid">
+          <div class="form-row"><label>펀드현황 (펀드정보3.xlsx)</label><input type="file" id="monthlyFundFile" accept=".xlsx"></div>
+          <div class="form-row"><label>자산현황 (명세부.xlsx)</label><input type="file" id="monthlyAssetFile" accept=".xlsx"></div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary" id="monthlyPreviewBtn">미리보기</button>
+        </div>
+        <div id="monthlyReviewArea"></div>
+      </div>
+    `;
+  }
+
+  function readWorkbook(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        try { resolve(XLSX.read(reader.result, { type: 'array' })); }
+        catch (e) { reject(e); }
+      };
+      reader.onerror = () => reject(reader.error);
+      reader.readAsArrayBuffer(file);
+    });
+  }
+
+  function renderMonthlyReview(result) {
+    const fm = result.fundMaster, ad = result.assetDetail, ev = result.evalStatus;
+
+    const section = (title, rows, cols) => `
+      <details style="margin-top:8px;">
+        <summary style="cursor:pointer;font-weight:600;font-size:12.5px;">${Utils.escapeHtml(title)} (${rows.length}건)</summary>
+        ${rows.length ? `
+        <div style="max-height:220px;overflow:auto;margin-top:6px;border:1px solid var(--border);border-radius:6px;">
+          <table class="fund-table" style="min-width:0;">
+            <thead><tr>${cols.map(c => `<th>${Utils.escapeHtml(c)}</th>`).join('')}</tr></thead>
+            <tbody>
+              ${rows.map(r => `<tr>${r.map(v => `<td>${Utils.escapeHtml(v === undefined || v === null ? '' : String(v))}</td>`).join('')}</tr>`).join('')}
+            </tbody>
+          </table>
+        </div>` : ''}
+      </details>
+    `;
+
+    return `
+      <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);">
+        <div style="font-weight:600;margin-bottom:6px;">미리보기 결과</div>
+        <div class="detail-grid">
+          <div class="detail-item"><div class="k">fund_master 변경</div><div class="v">${fm.changes.length}건</div></div>
+          <div class="detail-item"><div class="k">신규설정</div><div class="v">${fm.addedFunds.length}개</div></div>
+          <div class="detail-item"><div class="k">상환처리 추정(제외)</div><div class="v">${fm.removedFunds.length}개</div></div>
+          <div class="detail-item"><div class="k">클래스펀드 제외</div><div class="v">${fm.skippedClassFunds}개</div></div>
+          <div class="detail-item"><div class="k">asset_detail 변경</div><div class="v">${ad.changes.length}건</div></div>
+          <div class="detail-item"><div class="k">신규 취득</div><div class="v">${ad.added.length}건</div></div>
+          <div class="detail-item"><div class="k">매각추정(미확인)</div><div class="v">${ad.missing.length}건</div></div>
+          <div class="detail-item"><div class="k">listed 확인필요</div><div class="v">${ev.listedReview.length}건</div></div>
+        </div>
+        ${section('펀드정보 변경사항', fm.changes, ['펀드코드', '필드', '기존값', '신규값'])}
+        ${section('신규설정 펀드', fm.addedFunds.map(c => [c]), ['펀드코드'])}
+        ${section('상환처리 추정 펀드', fm.removedFunds, ['펀드코드', '펀드명'])}
+        ${section('자산정보 변경사항', ad.changes, ['펀드코드', '자산명', '필드', '기존값', '신규값'])}
+        ${section('신규 취득 자산', ad.added, ['펀드코드', '자산명'])}
+        ${section('매각추정(미확인) 자산', ad.missing, ['펀드코드', '자산명'])}
+        ${section('listed 확인필요', ev.listedReview, ['펀드코드', '자산명', '자산유형'])}
+        <div class="btn-row" style="margin-top:14px;">
+          <button class="btn btn-primary" id="monthlyApplyBtn">위 내용대로 시트에 반영하기</button>
+        </div>
+        <div style="font-size:11px;color:var(--text-500);margin-top:6px;">
+          ⚠ 반영 시 fund_master/asset_detail 시트 전체가 위 내용으로 교체됩니다. 충분히 검토한 뒤 눌러주세요.
+        </div>
+      </div>
+    `;
+  }
+
+  function bindMonthlyUpdateSection() {
+    const previewBtn = document.getElementById('monthlyPreviewBtn');
+    if (!previewBtn) return;
+
+    previewBtn.addEventListener('click', async () => {
+      const fundFile = document.getElementById('monthlyFundFile').files[0];
+      const assetFile = document.getElementById('monthlyAssetFile').files[0];
+      if (!fundFile || !assetFile) {
+        App.showToast('펀드현황/자산현황 파일을 모두 선택해주세요.', 'error');
+        return;
+      }
+      previewBtn.disabled = true; previewBtn.textContent = '분석 중…';
+      try {
+        const [fundWb, assetWb] = await Promise.all([readWorkbook(fundFile), readWorkbook(assetFile)]);
+        monthlyResult = MonthlyMerge.run(fundWb, assetWb, state.data.fundMaster, state.data.assetDetail);
+        document.getElementById('monthlyReviewArea').innerHTML = renderMonthlyReview(monthlyResult);
+        bindMonthlyApplyButton();
+        App.showToast('미리보기가 생성되었습니다. 아래 내용을 검토해주세요.', 'success');
+      } catch (err) {
+        App.showToast('분석 중 오류: ' + err.message, 'error');
+      } finally {
+        previewBtn.disabled = false; previewBtn.textContent = '미리보기';
+      }
+    });
+  }
+
+  function bindMonthlyApplyButton() {
+    const btn = document.getElementById('monthlyApplyBtn');
+    if (!btn) return;
+    btn.addEventListener('click', async () => {
+      if (!monthlyResult) return;
+      btn.disabled = true; btn.textContent = '반영 중…';
+      try {
+        const r1 = await Api.bulkUpload('fund_master', monthlyResult.fundMaster.newRows);
+        const r2 = await Api.bulkUpload('asset_detail', monthlyResult.assetDetail.newRows);
+        App.showToast(`반영 완료 (fund_master ${r1.rowsWritten}행 / asset_detail ${r2.rowsWritten}행)`, 'success');
+        monthlyResult = null;
+        document.getElementById('monthlyReviewArea').innerHTML = '';
+        await App.reloadData();
+      } catch (err) {
+        App.showToast('반영 중 오류: ' + err.message, 'error');
+        btn.disabled = false; btn.textContent = '위 내용대로 시트에 반영하기';
+      }
+    });
   }
 
   // ---- CSV 업로드 ----
