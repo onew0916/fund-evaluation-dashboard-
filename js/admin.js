@@ -120,6 +120,8 @@ window.Admin = (() => {
   function renderMonthlyReview(result) {
     const fm = result.fundMaster, ad = result.assetDetail, ev = result.evalStatus;
 
+    const inputStyle = 'width:100%;border:1px solid var(--border);border-radius:4px;padding:3px 6px;';
+
     const section = (title, rows, cols) => `
       <details style="margin-top:8px;">
         <summary style="cursor:pointer;font-weight:600;font-size:12.5px;">${Utils.escapeHtml(title)} (${rows.length}건)</summary>
@@ -129,6 +131,59 @@ window.Admin = (() => {
             <thead><tr>${cols.map(c => `<th>${Utils.escapeHtml(c)}</th>`).join('')}</tr></thead>
             <tbody>
               ${rows.map(r => `<tr>${r.map(v => `<td>${Utils.escapeHtml(v === undefined || v === null ? '' : String(v))}</td>`).join('')}</tr>`).join('')}
+            </tbody>
+          </table>
+        </div>` : ''}
+      </details>
+    `;
+
+    // 신규값 칸을 직접 고칠 수 있는 변경사항 표 (펀드정보/자산정보 공용)
+    const editableChangesSection = (title, changes, keyCols, inputClass) => `
+      <details style="margin-top:8px;" ${changes.length ? 'open' : ''}>
+        <summary style="cursor:pointer;font-weight:600;font-size:12.5px;">${Utils.escapeHtml(title)} (${changes.length}건)${changes.length ? ' - 신규값을 직접 고칠 수 있습니다' : ''}</summary>
+        ${changes.length ? `
+        <div style="max-height:260px;overflow:auto;margin-top:6px;border:1px solid var(--border);border-radius:6px;">
+          <table class="fund-table" style="min-width:0;">
+            <thead><tr>${keyCols.map(c => `<th>${Utils.escapeHtml(c)}</th>`).join('')}<th>필드</th><th>기존값</th><th>신규값</th></tr></thead>
+            <tbody>
+              ${changes.map((c, i) => {
+                const keyVals = c.slice(0, keyCols.length);
+                const field = c[keyCols.length];
+                const oldVal = c[keyCols.length + 1];
+                const newVal = c[keyCols.length + 2];
+                return `<tr>
+                  ${keyVals.map(v => `<td>${Utils.escapeHtml(String(v ?? ''))}</td>`).join('')}
+                  <td>${Utils.escapeHtml(field)}</td>
+                  <td>${Utils.escapeHtml(String(oldVal ?? ''))}</td>
+                  <td><input class="${inputClass}" data-idx="${i}" value="${Utils.escapeHtml(String(newVal ?? ''))}" style="${inputStyle}"></td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>` : ''}
+      </details>
+    `;
+
+    const listedReviewSection = (rows) => `
+      <details style="margin-top:8px;" ${rows.length ? 'open' : ''}>
+        <summary style="cursor:pointer;font-weight:600;font-size:12.5px;">listed 확인필요 (${rows.length}건)${rows.length ? ' - 시장성/비시장성을 바로 지정할 수 있습니다' : ''}</summary>
+        ${rows.length ? `
+        <div style="max-height:260px;overflow:auto;margin-top:6px;border:1px solid var(--border);border-radius:6px;">
+          <table class="fund-table" style="min-width:0;">
+            <thead><tr><th>펀드코드</th><th>자산명</th><th>자산유형</th><th>시장성 구분</th></tr></thead>
+            <tbody>
+              ${rows.map((r, i) => `<tr>
+                <td>${Utils.escapeHtml(r[0])}</td>
+                <td>${Utils.escapeHtml(r[1])}</td>
+                <td>${Utils.escapeHtml(r[2])}</td>
+                <td>
+                  <select class="mm-listed-select" data-idx="${i}" style="${inputStyle}">
+                    <option value="">미정(확인필요로 남김)</option>
+                    <option value="시장성">시장성</option>
+                    <option value="비시장성">비시장성</option>
+                  </select>
+                </td>
+              </tr>`).join('')}
             </tbody>
           </table>
         </div>` : ''}
@@ -148,18 +203,18 @@ window.Admin = (() => {
           <div class="detail-item"><div class="k">매각추정(미확인)</div><div class="v">${ad.missing.length}건</div></div>
           <div class="detail-item"><div class="k">listed 확인필요</div><div class="v">${ev.listedReview.length}건</div></div>
         </div>
-        ${section('펀드정보 변경사항', fm.changes, ['펀드코드', '필드', '기존값', '신규값'])}
+        ${editableChangesSection('펀드정보 변경사항', fm.changes, ['펀드코드'], 'mm-fund-change-input')}
         ${section('신규설정 펀드', fm.addedFunds.map(c => [c]), ['펀드코드'])}
         ${section('상환처리 추정 펀드', fm.removedFunds, ['펀드코드', '펀드명'])}
-        ${section('자산정보 변경사항', ad.changes, ['펀드코드', '자산명', '필드', '기존값', '신규값'])}
+        ${editableChangesSection('자산정보 변경사항', ad.changes, ['펀드코드', '자산명'], 'mm-asset-change-input')}
         ${section('신규 취득 자산', ad.added, ['펀드코드', '자산명'])}
         ${section('매각추정(미확인) 자산', ad.missing, ['펀드코드', '자산명'])}
-        ${section('listed 확인필요', ev.listedReview, ['펀드코드', '자산명', '자산유형'])}
+        ${listedReviewSection(ev.listedReview)}
         <div class="btn-row" style="margin-top:14px;">
           <button class="btn btn-primary" id="monthlyApplyBtn">위 내용대로 시트에 반영하기</button>
         </div>
         <div style="font-size:11px;color:var(--text-500);margin-top:6px;">
-          ⚠ 반영 시 fund_master/asset_detail 시트 전체가 위 내용으로 교체됩니다. 충분히 검토한 뒤 눌러주세요.
+          ⚠ 반영 시 fund_master/asset_detail 시트 전체가 위 내용(수정하신 값 포함)으로 교체됩니다. 충분히 검토한 뒤 눌러주세요.
         </div>
       </div>
     `;
@@ -191,6 +246,34 @@ window.Admin = (() => {
     });
   }
 
+  // 미리보기 표에서 사용자가 직접 고친 값들을 monthlyResult.newRows에 반영한다 (반영 직전에 호출).
+  function applyMonthlyReviewEdits() {
+    document.querySelectorAll('.mm-fund-change-input').forEach(input => {
+      const change = monthlyResult.fundMaster.changes[Number(input.dataset.idx)];
+      if (!change) return;
+      const [code, field] = change;
+      const row = monthlyResult.fundMaster.newRows.find(r => r.fund_code === code);
+      if (row) row[field] = input.value;
+    });
+
+    document.querySelectorAll('.mm-asset-change-input').forEach(input => {
+      const change = monthlyResult.assetDetail.changes[Number(input.dataset.idx)];
+      if (!change) return;
+      const [code, name, field] = change;
+      const row = monthlyResult.assetDetail.newRows.find(r => r.fund_code === code && r.asset_name === name);
+      if (row) row[field] = input.value;
+    });
+
+    document.querySelectorAll('.mm-listed-select').forEach(sel => {
+      if (!sel.value) return;
+      const item = monthlyResult.evalStatus.listedReview[Number(sel.dataset.idx)];
+      if (!item) return;
+      const [code, name] = item;
+      const row = monthlyResult.assetDetail.newRows.find(r => r.fund_code === code && r.asset_name === name);
+      if (row) row.listed = sel.value;
+    });
+  }
+
   function bindMonthlyApplyButton() {
     const btn = document.getElementById('monthlyApplyBtn');
     if (!btn) return;
@@ -198,6 +281,7 @@ window.Admin = (() => {
       if (!monthlyResult) return;
       btn.disabled = true; btn.textContent = '반영 중…';
       try {
+        applyMonthlyReviewEdits();
         const r1 = await Api.bulkUpload('fund_master', monthlyResult.fundMaster.newRows);
         const r2 = await Api.bulkUpload('asset_detail', monthlyResult.assetDetail.newRows);
         App.showToast(`반영 완료 (fund_master ${r1.rowsWritten}행 / asset_detail ${r2.rowsWritten}행)`, 'success');
