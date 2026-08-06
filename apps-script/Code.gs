@@ -61,9 +61,6 @@ function doPost(e) {
       case 'update_committee_history':
         result = updateCommitteeHistory(payload.rowKey, payload.fields);
         break;
-      case 'debug_date':
-        result = debugDate(payload.sheetName, payload.colName, payload.matchCol, payload.matchVal);
-        break;
       default:
         return jsonOut({ ok: false, error: '알 수 없는 action: ' + action });
     }
@@ -98,11 +95,14 @@ function getHeader(sheet) {
 function normalizeCellValue(v) {
   // 시트 셀이 '날짜' 형식으로 저장되어 있으면 getValues()가 Date 객체를 반환하므로,
   // 문자열 비교가 항상 가능하도록 yyyy-MM-dd 형태로 통일한다.
-  // 주의: Session.getScriptTimeZone()은 Apps Script 프로젝트 설정 타임존이라 스프레드시트
+  // 주의 1: "v instanceof Date"는 Apps Script 실행환경에서 실제로는 날짜 값인데도
+  // false가 나오는 경우가 있다(V8 런타임의 realm 차이로 인한 알려진 이슈). 그래서
+  // instanceof 대신 Object.prototype.toString으로 판별해야 한다.
+  // 주의 2: Session.getScriptTimeZone()은 Apps Script 프로젝트 설정 타임존이라 스프레드시트
   // 자체의 타임존과 다를 수 있고, 그 경우 날짜가 하루 밀려서 문자열이 달라져 행 매칭이
-  // 실패한다(클라이언트는 항상 스프레드시트 타임존 기준으로 CSV export된 날짜 문자열을 보냄).
-  // 그래서 반드시 스프레드시트 타임존을 기준으로 포맷해야 한다.
-  if (v instanceof Date) {
+  // 실패할 수 있다(클라이언트는 항상 스프레드시트 타임존 기준으로 CSV export된 날짜 문자열을
+  // 받으므로, 서버도 반드시 스프레드시트 타임존을 기준으로 포맷해야 한다).
+  if (Object.prototype.toString.call(v) === '[object Date]') {
     return Utilities.formatDate(v, SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone(), 'yyyy-MM-dd');
   }
   return String(v === null || v === undefined ? '' : v).trim();
@@ -199,30 +199,6 @@ function addCommitteeHistory(row) {
   const newRow = header.map(col => (row[col] !== undefined ? row[col] : ''));
   sheet.appendRow(newRow);
   return { added: true, row: row };
-}
-
-// 진단용 임시 함수 - 문제 해결 후 제거할 것
-function debugDate(sheetName, colName, matchCol, matchVal) {
-  const sheet = getSheet(sheetName);
-  const header = getHeader(sheet);
-  const colIdx = header.indexOf(colName);
-  const matchIdx = header.indexOf(matchCol);
-  const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, sheet.getLastColumn()).getValues();
-  for (let i = 0; i < data.length; i++) {
-    if (normalizeCellValue(data[i][matchIdx]) === normalizeCellValue(matchVal)) {
-      const raw = data[i][colIdx];
-      return {
-        rawType: typeof raw,
-        isDate: raw instanceof Date,
-        rawToString: String(raw),
-        rawISO: (raw instanceof Date) ? raw.toISOString() : null,
-        scriptTimeZone: Session.getScriptTimeZone(),
-        spreadsheetTimeZone: SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone(),
-        normalized: normalizeCellValue(raw)
-      };
-    }
-  }
-  return { error: 'no row matched matchCol/matchVal' };
 }
 
 function updateCommitteeHistory(rowKey, fields) {
