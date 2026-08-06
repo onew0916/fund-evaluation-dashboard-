@@ -39,6 +39,42 @@ window.Panel = (() => {
         renderAssetModalBody();
       });
     });
+
+    // 평가이력/위원회 이력 탭에서 "입력하러 가기" 버튼은 매 렌더마다 새로 그려지므로,
+    // 부모(assetModalBody)에 위임해서 한 번만 바인딩한다.
+    document.getElementById('assetModalBody').addEventListener('click', e => {
+      if (e.target.closest('.jump-eval-input-btn')) jumpToEvalHistoryInput(modalFund, modalAsset);
+      else if (e.target.closest('.jump-committee-input-btn')) jumpToCommitteeInput(modalFund, modalAsset);
+    });
+  }
+
+  // 자산상세 모달에서 관리자 도구의 입력폼으로 이동하며 펀드/자산을 미리 채워준다.
+  function jumpToEvalHistoryInput(fund, asset) {
+    closeAssetModal();
+    App.switchView('admin');
+    const fundSelect = document.getElementById('evalHistoryFundSelect');
+    const assetSelect = document.getElementById('evalHistoryAssetSelect');
+    if (fundSelect) {
+      fundSelect.value = fund.fund_code;
+      fundSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    if (assetSelect) assetSelect.value = asset.asset_name;
+    const form = document.getElementById('evalHistoryForm');
+    if (form) form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function jumpToCommitteeInput(fund, asset) {
+    closeAssetModal();
+    App.switchView('admin');
+    const fundsInput = document.getElementById('committeeFundsInput');
+    const assetsInput = document.getElementById('committeeAssetsInput');
+    if (fundsInput) {
+      fundsInput.value = fund.fund_code;
+      fundsInput.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    if (assetsInput) assetsInput.value = asset.asset_name;
+    const form = document.getElementById('committeeForm');
+    if (form) form.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
   function open(fundCode) {
@@ -189,6 +225,9 @@ window.Panel = (() => {
   }
 
   function renderAssetModalHistory(fund, asset) {
+    const jumpBtn = state.isAdmin
+      ? `<div class="btn-row" style="margin-bottom:12px;"><button class="btn btn-secondary jump-eval-input-btn">관리자 도구에서 평가이력 입력하기</button></div>`
+      : '';
     const rows = (state.data.evalHistory || [])
       .filter(h => h.fund_code === fund.fund_code && h.asset_name === asset.asset_name)
       .sort((r1, r2) => {
@@ -198,8 +237,8 @@ window.Panel = (() => {
         if (!d2) return -1;
         return d2 - d1;
       });
-    if (!rows.length) return `<div class="empty-state">이 자산에 대한 평가이력이 없습니다.</div>`;
-    return rows.map(r => `
+    if (!rows.length) return jumpBtn + `<div class="empty-state">이 자산에 대한 평가이력이 없습니다.</div>`;
+    return jumpBtn + rows.map(r => `
       <div class="history-entry" style="margin-bottom:14px;">
         <div class="asset-timeline-name">${Utils.formatDate(r.eval_base_date)} ${historyReflectedFlag(r)}</div>
         <div class="detail-grid" style="margin-top:6px;">
@@ -211,9 +250,12 @@ window.Panel = (() => {
   }
 
   function renderAssetModalCommittee(fund, asset) {
+    const jumpBtn = state.isAdmin
+      ? `<div class="btn-row" style="margin-bottom:12px;"><button class="btn btn-secondary jump-committee-input-btn">관리자 도구에서 위원회 이력 입력하기</button></div>`
+      : '';
     const matches = CommitteeView.findForAsset(fund.fund_code, asset.asset_name);
-    if (!matches.length) return `<div class="empty-state">관련된 위원회 개최이력이 없습니다.</div>`;
-    return matches.map(({ r }) => CommitteeView.renderEntrySummary(r)).join('');
+    if (!matches.length) return jumpBtn + `<div class="empty-state">관련된 위원회 개최이력이 없습니다.</div>`;
+    return jumpBtn + matches.map(({ r }) => CommitteeView.renderEntrySummary(r)).join('');
   }
 
   function renderAdminFundForm(fund) {
