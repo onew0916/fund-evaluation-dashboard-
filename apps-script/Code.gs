@@ -61,6 +61,9 @@ function doPost(e) {
       case 'update_committee_history':
         result = updateCommitteeHistory(payload.rowKey, payload.fields);
         break;
+      case 'debug_date':
+        result = debugDate(payload.sheetName, payload.colName, payload.matchCol, payload.matchVal);
+        break;
       default:
         return jsonOut({ ok: false, error: '알 수 없는 action: ' + action });
     }
@@ -196,6 +199,30 @@ function addCommitteeHistory(row) {
   const newRow = header.map(col => (row[col] !== undefined ? row[col] : ''));
   sheet.appendRow(newRow);
   return { added: true, row: row };
+}
+
+// 진단용 임시 함수 - 문제 해결 후 제거할 것
+function debugDate(sheetName, colName, matchCol, matchVal) {
+  const sheet = getSheet(sheetName);
+  const header = getHeader(sheet);
+  const colIdx = header.indexOf(colName);
+  const matchIdx = header.indexOf(matchCol);
+  const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, sheet.getLastColumn()).getValues();
+  for (let i = 0; i < data.length; i++) {
+    if (normalizeCellValue(data[i][matchIdx]) === normalizeCellValue(matchVal)) {
+      const raw = data[i][colIdx];
+      return {
+        rawType: typeof raw,
+        isDate: raw instanceof Date,
+        rawToString: String(raw),
+        rawISO: (raw instanceof Date) ? raw.toISOString() : null,
+        scriptTimeZone: Session.getScriptTimeZone(),
+        spreadsheetTimeZone: SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone(),
+        normalized: normalizeCellValue(raw)
+      };
+    }
+  }
+  return { error: 'no row matched matchCol/matchVal' };
 }
 
 function updateCommitteeHistory(rowKey, fields) {
