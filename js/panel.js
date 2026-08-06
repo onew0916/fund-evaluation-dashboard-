@@ -40,47 +40,29 @@ window.Panel = (() => {
       });
     });
 
-    // 평가이력/위원회 이력 탭에서 "입력하러 가기" 버튼은 매 렌더마다 새로 그려지므로,
+    // 평가이력/위원회 이력 탭의 인라인 입력폼은 매 렌더마다 새로 그려지므로,
     // 부모(assetModalBody)에 위임해서 한 번만 바인딩한다.
-    document.getElementById('assetModalBody').addEventListener('click', e => {
-      if (e.target.closest('.jump-eval-input-btn')) jumpToEvalHistoryInput(modalFund, modalAsset);
-      else if (e.target.closest('.jump-committee-input-btn')) jumpToCommitteeInput(modalFund, modalAsset);
-    });
     document.getElementById('assetModalBody').addEventListener('submit', e => {
       if (e.target.classList.contains('asset-modal-detail-form')) {
         e.preventDefault();
         submitAssetModalDetailForm(e.target);
+      } else if (e.target.classList.contains('asset-modal-evalhistory-form')) {
+        e.preventDefault();
+        submitAssetModalEvalHistoryForm(e.target);
+      } else if (e.target.classList.contains('asset-modal-committee-form')) {
+        e.preventDefault();
+        submitAssetModalCommitteeForm(e.target);
       }
     });
-  }
-
-  // 자산상세 모달에서 관리자 도구의 입력폼으로 이동하며 펀드/자산을 미리 채워준다.
-  function jumpToEvalHistoryInput(fund, asset) {
-    closeAssetModal();
-    App.switchView('admin');
-    const fundSelect = document.getElementById('evalHistoryFundSelect');
-    const assetSelect = document.getElementById('evalHistoryAssetSelect');
-    if (fundSelect) {
-      fundSelect.value = fund.fund_code;
-      fundSelect.dispatchEvent(new Event('change', { bubbles: true }));
-    }
-    if (assetSelect) assetSelect.value = asset.asset_name;
-    const form = document.getElementById('evalHistoryForm');
-    if (form) form.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }
-
-  function jumpToCommitteeInput(fund, asset) {
-    closeAssetModal();
-    App.switchView('admin');
-    const fundsInput = document.getElementById('committeeFundsInput');
-    const assetsInput = document.getElementById('committeeAssetsInput');
-    if (fundsInput) {
-      fundsInput.value = fund.fund_code;
-      fundsInput.dispatchEvent(new Event('input', { bubbles: true }));
-    }
-    if (assetsInput) assetsInput.value = asset.asset_name;
-    const form = document.getElementById('committeeForm');
-    if (form) form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    document.getElementById('assetModalBody').addEventListener('change', e => {
+      if (e.target.classList.contains('amc-eval-conducted')) {
+        const row = document.querySelector('.amc-eval-amount-row');
+        if (row) row.style.display = e.target.value === 'Y' ? '' : 'none';
+      } else if (e.target.classList.contains('amc-impair-yn')) {
+        const row = document.querySelector('.amc-impair-level-row');
+        if (row) row.style.display = e.target.value === 'Y' ? '' : 'none';
+      }
+    });
   }
 
   function open(fundCode) {
@@ -263,26 +245,32 @@ window.Panel = (() => {
     `;
   }
 
+  // 저장 후 모달을 최신 데이터로 다시 그린다 (모달은 열어둔 채로 유지).
+  async function refreshAssetModal(fundCode, assetName) {
+    await App.reloadData();
+    const freshFund = state.data.fundMaster.find(f => f.fund_code === fundCode);
+    const freshAsset = state.data.assetDetail.find(a => a.fund_code === fundCode && a.asset_name === assetName);
+    if (freshFund && freshAsset) {
+      modalFund = freshFund;
+      modalAsset = freshAsset;
+      renderAssetModalBody();
+    } else {
+      closeAssetModal();
+    }
+    refreshIfOpen();
+  }
+
   async function submitAssetModalDetailForm(form) {
     if (!modalFund || !modalAsset) return;
     const btn = form.querySelector('button[type="submit"]');
     btn.disabled = true; btn.textContent = '저장 중…';
     const fd = new FormData(form);
     const fields = Object.fromEntries(fd.entries());
+    const fundCode = modalFund.fund_code, assetName = modalAsset.asset_name;
     try {
-      await Api.updateAsset(modalFund.fund_code, modalAsset.asset_name, fields);
+      await Api.updateAsset(fundCode, assetName, fields);
       App.showToast('자산상세내역이 저장되었습니다.', 'success');
-      await App.reloadData();
-      const freshFund = state.data.fundMaster.find(f => f.fund_code === modalFund.fund_code);
-      const freshAsset = state.data.assetDetail.find(a => a.fund_code === modalFund.fund_code && a.asset_name === modalAsset.asset_name);
-      if (freshFund && freshAsset) {
-        modalFund = freshFund;
-        modalAsset = freshAsset;
-        renderAssetModalBody();
-      } else {
-        closeAssetModal();
-      }
-      refreshIfOpen();
+      await refreshAssetModal(fundCode, assetName);
     } catch (err) {
       App.showToast(err.message, 'error');
       btn.disabled = false; btn.textContent = '자산상세내역 저장';
@@ -294,9 +282,7 @@ window.Panel = (() => {
   }
 
   function renderAssetModalHistory(fund, asset) {
-    const jumpBtn = state.isAdmin
-      ? `<div class="btn-row" style="margin-bottom:12px;"><button class="btn btn-secondary jump-eval-input-btn">관리자 도구에서 평가이력 입력하기</button></div>`
-      : '';
+    const form = state.isAdmin ? renderAssetModalEvalHistoryForm() : '';
     const rows = (state.data.evalHistory || [])
       .filter(h => h.fund_code === fund.fund_code && h.asset_name === asset.asset_name)
       .sort((r1, r2) => {
@@ -306,8 +292,8 @@ window.Panel = (() => {
         if (!d2) return -1;
         return d2 - d1;
       });
-    if (!rows.length) return jumpBtn + `<div class="empty-state">이 자산에 대한 평가이력이 없습니다.</div>`;
-    return jumpBtn + rows.map(r => `
+    if (!rows.length) return form + `<div class="empty-state">이 자산에 대한 평가이력이 없습니다.</div>`;
+    return form + rows.map(r => `
       <div class="history-entry" style="margin-bottom:14px;">
         <div class="asset-timeline-name">${Utils.formatDate(r.eval_base_date)} ${historyReflectedFlag(r)}</div>
         <div class="detail-grid" style="margin-top:6px;">
@@ -318,13 +304,121 @@ window.Panel = (() => {
     `).join('');
   }
 
+  // 이 자산에 바로 평가이력을 추가하는 인라인 폼 (fund_code/asset_name은 모달 컨텍스트로 고정).
+  function renderAssetModalEvalHistoryForm() {
+    return `
+      <form class="asset-modal-evalhistory-form" style="margin-bottom:16px;padding-bottom:14px;border-bottom:1px dashed var(--border-strong);">
+        <div class="detail-grid">
+          <div class="form-row"><label>평가기준일</label><input type="date" name="eval_base_date" required></div>
+          <div class="form-row"><label>평가금액</label><input type="number" name="eval_amount"></div>
+          <div class="form-row"><label>장부가 반영여부</label>
+            <select name="book_reflected">
+              <option value="" selected>공란 (확인필요)</option>
+              <option value="Y">Y (반영)</option>
+              <option value="N">N (미반영)</option>
+            </select>
+          </div>
+          <div class="form-row full"><label>특이사항</label><textarea name="notes"></textarea></div>
+        </div>
+        <div class="btn-row" style="margin-top:8px;"><button type="submit" class="btn btn-primary">평가이력 추가</button></div>
+      </form>
+    `;
+  }
+
+  async function submitAssetModalEvalHistoryForm(form) {
+    if (!modalFund || !modalAsset) return;
+    const btn = form.querySelector('button[type="submit"]');
+    btn.disabled = true; btn.textContent = '저장 중…';
+    const fd = new FormData(form);
+    const fields = Object.fromEntries(fd.entries());
+    const fundCode = modalFund.fund_code, assetName = modalAsset.asset_name;
+    try {
+      await Api.addEvalHistory(Object.assign({ fund_code: fundCode, asset_name: assetName }, fields));
+      await Admin.syncAssetFromEvalHistory(fundCode, assetName, fields.eval_base_date, fields.eval_amount);
+      App.showToast('평가이력이 추가되었습니다.', 'success');
+      await refreshAssetModal(fundCode, assetName);
+    } catch (err) {
+      App.showToast(err.message, 'error');
+      btn.disabled = false; btn.textContent = '평가이력 추가';
+    }
+  }
+
   function renderAssetModalCommittee(fund, asset) {
-    const jumpBtn = state.isAdmin
-      ? `<div class="btn-row" style="margin-bottom:12px;"><button class="btn btn-secondary jump-committee-input-btn">관리자 도구에서 위원회 이력 입력하기</button></div>`
-      : '';
+    const form = state.isAdmin ? renderAssetModalCommitteeForm() : '';
     const matches = CommitteeView.findForAsset(fund.fund_code, asset.asset_name);
-    if (!matches.length) return jumpBtn + `<div class="empty-state">관련된 위원회 개최이력이 없습니다.</div>`;
-    return jumpBtn + matches.map(({ r }) => CommitteeView.renderEntrySummary(r)).join('');
+    if (!matches.length) return form + `<div class="empty-state">관련된 위원회 개최이력이 없습니다.</div>`;
+    return form + matches.map(({ r }) => CommitteeView.renderEntrySummary(r)).join('');
+  }
+
+  // 이 자산을 대상으로 위원회 이력을 바로 추가하는 인라인 폼
+  // (target_funds/target_assets는 모달 컨텍스트의 펀드코드/자산명 1건으로 고정).
+  function renderAssetModalCommitteeForm() {
+    const impairOptions = (CONFIG.IMPAIR_LEVELS || []).filter(l => l !== '정상')
+      .map(l => `<option value="${l}">${l}</option>`).join('');
+    return `
+      <form class="asset-modal-committee-form" style="margin-bottom:16px;padding-bottom:14px;border-bottom:1px dashed var(--border-strong);">
+        <div class="detail-grid">
+          <div class="form-row"><label>회차</label><input name="session_no" placeholder="예: 2026년 제3차"></div>
+          <div class="form-row"><label>개최일</label><input type="date" name="meeting_date" required></div>
+          <div class="form-row full"><label>안건</label><textarea name="agenda"></textarea></div>
+          <div class="form-row full"><label>의결내용</label><textarea name="resolution"></textarea></div>
+          <div class="form-row"><label>평가시행 여부</label>
+            <select name="eval_conducted" class="amc-eval-conducted">
+              <option value="N" selected>N (평가미시행)</option>
+              <option value="Y">Y (평가시행)</option>
+            </select>
+          </div>
+          <div class="form-row amc-eval-amount-row" style="display:none;">
+            <label>평가금액</label><input type="number" name="eval_amount">
+          </div>
+          <div class="form-row"><label>부실분류 여부</label>
+            <select name="impair_yn" class="amc-impair-yn">
+              <option value="N" selected>N (해당없음)</option>
+              <option value="Y">Y (부실분류 의결)</option>
+            </select>
+          </div>
+          <div class="form-row amc-impair-level-row" style="display:none;">
+            <label>부실단계</label><select name="impair_level">${impairOptions}</select>
+          </div>
+          <div class="form-row"><label>장부가 반영여부</label>
+            <select name="reflected">
+              <option value="" selected>공란 (확인필요)</option>
+              <option value="Y">Y (반영)</option>
+              <option value="N">N (미반영)</option>
+            </select>
+          </div>
+          <div class="form-row full"><label>참석위원</label><input name="attendees"></div>
+          <div class="form-row full"><label>비고</label><textarea name="remark"></textarea></div>
+        </div>
+        <div class="btn-row" style="margin-top:8px;"><button type="submit" class="btn btn-primary">위원회 이력 추가</button></div>
+      </form>
+    `;
+  }
+
+  async function submitAssetModalCommitteeForm(form) {
+    if (!modalFund || !modalAsset) return;
+    const btn = form.querySelector('button[type="submit"]');
+    btn.disabled = true; btn.textContent = '저장 중…';
+    const fd = new FormData(form);
+    const fields = Object.fromEntries(fd.entries());
+    const fundCode = modalFund.fund_code, assetName = modalAsset.asset_name;
+    if (fields.impair_yn !== 'Y') fields.impair_level = '';
+    if (fields.eval_conducted !== 'Y') fields.eval_amount = '';
+    const row = Object.assign({}, fields, { target_funds: fundCode, target_assets: assetName });
+    try {
+      await Api.addCommitteeHistory(row);
+      if (row.eval_conducted === 'Y' && row.eval_amount) {
+        await Admin.syncEvalHistoryFromCommittee(row);
+      }
+      if (row.impair_yn === 'Y' && row.impair_level) {
+        await Admin.syncImpairFromCommittee(row);
+      }
+      App.showToast('위원회 이력이 추가되었습니다.', 'success');
+      await refreshAssetModal(fundCode, assetName);
+    } catch (err) {
+      App.showToast(err.message, 'error');
+      btn.disabled = false; btn.textContent = '위원회 이력 추가';
+    }
   }
 
   function renderAdminFundForm(fund) {
