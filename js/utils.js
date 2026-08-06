@@ -78,6 +78,15 @@ window.Utils = (() => {
     return diff > 0 ? `D-${diff}` : `D+${Math.abs(diff)}`;
   }
 
+  // 평가적용종료일 등 "기준일 + 1년" 계산용 (같은 달/일, 연도만 +1)
+  function addOneYear(str) {
+    const d = parseDate(str);
+    if (!d) return '';
+    const nd = new Date(d.getFullYear() + 1, d.getMonth(), d.getDate());
+    const pad = n => String(n).padStart(2, '0');
+    return `${nd.getFullYear()}-${pad(nd.getMonth() + 1)}-${pad(nd.getDate())}`;
+  }
+
   // ---- 숫자/통화 ----
   // 시트에서 오는 숫자는 천단위 콤마(,)가 포함된 문자열일 수 있어 Number()가 바로 NaN이 됨 → 콤마 제거 후 변환
   function toNumber(v) {
@@ -138,7 +147,7 @@ window.Utils = (() => {
   }
 
   return {
-    parseCSV, parseDate, today, diffDays, formatDate, ddayLabel,
+    parseCSV, parseDate, today, diffDays, formatDate, ddayLabel, addOneYear,
     formatNumber, formatKRW, statusBadge, calcReflectRequired, bookReflectedBadge,
     escapeHtml, debounce, toNumber
   };

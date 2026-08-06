@@ -128,7 +128,6 @@ window.Panel = (() => {
     } else {
       body.innerHTML = renderAssetsTab(fund);
       bindAssetCardClicks(fund);
-      if (state.isAdmin) bindAdminAssetForms(fund);
     }
   }
 
@@ -174,7 +173,6 @@ window.Panel = (() => {
           <div class="row"><span>장부평가액</span><b>${Utils.formatKRW(a.book_value)}</b></div>
           <div class="row"><span>평가금액</span><b>${Utils.formatKRW(a.eval_amount)}</b></div>
           <div class="row"><span>최근평가일</span><b>${Utils.formatDate(a.last_eval_date)}</b></div>
-          ${state.isAdmin ? renderAdminAssetForm(a, idx) : ''}
         </div>
       `).join('')}
     `;
@@ -231,26 +229,21 @@ window.Panel = (() => {
   }
 
   // 관리자 모드에서 자산상세내역 탭 자체를 전체 필드 수정 폼으로 렌더링한다.
+  // 자산상세내역 탭(관리자 모드): 자산종류/시장성구분/평가규칙/최초취득일/대체평가근거/방법만
+  // 직접 수정 가능하다. 부실분류/최근평가일/평가금액/평가적용종료일은 평가이력·위원회이력
+  // 입력을 통해서만 반영되므로 여기서는 읽기 전용으로 보여준다.
   function renderAssetModalDetailForm(a) {
     const statusOptions = Object.keys(CONFIG.EVAL_STATUS)
       .map(s => `<option value="${s}" ${s === a.eval_status ? 'selected' : ''}>${s}</option>`).join('');
     const listedOptions = ['', '시장성', '비시장성']
       .map(v => `<option value="${v}" ${v === (a.listed || '') ? 'selected' : ''}>${v || '(미정)'}</option>`).join('');
-    const impairOptions = (CONFIG.IMPAIR_LEVELS || [])
-      .map(v => `<option value="${v}" ${v === (a.impair || '') ? 'selected' : ''}>${v}</option>`).join('');
     return `
       <form class="asset-modal-detail-form">
         <div class="detail-grid">
           <div class="form-row"><label>자산종류</label><input name="asset_type" value="${Utils.escapeHtml(a.asset_type || '')}"></div>
           <div class="form-row"><label>시장성/비시장성</label><select name="listed">${listedOptions}</select></div>
           <div class="form-row"><label>평가규칙</label><select name="eval_status">${statusOptions}</select></div>
-          <div class="form-row"><label>부실분류</label><select name="impair">${impairOptions}</select></div>
           <div class="form-row"><label>최초취득일</label><input type="date" name="acq_date" value="${toInputDate(a.acq_date)}"></div>
-          <div class="form-row"><label>최근평가일</label><input type="date" name="last_eval_date" value="${toInputDate(a.last_eval_date)}"></div>
-          <div class="form-row"><label>장부가</label><input type="number" name="book_value" value="${Utils.toNumber(a.book_value) || ''}"></div>
-          <div class="form-row"><label>평가금액</label><input type="number" name="eval_amount" value="${Utils.toNumber(a.eval_amount) || ''}"></div>
-          <div class="form-row"><label>직전평가시행일</label><input type="date" name="prev_dt" value="${toInputDate(a.prev_dt)}"></div>
-          <div class="form-row"><label>평가적용종료일</label><input type="date" name="apply_end" value="${toInputDate(a.apply_end)}"></div>
           <div class="form-row full"><label>대체평가근거</label><input name="alt_reason" value="${Utils.escapeHtml(a.alt_reason || '')}"></div>
           <div class="form-row full"><label>대체평가방법</label><input name="alt_method" value="${Utils.escapeHtml(a.alt_method || '')}"></div>
           <div class="form-row full"><label>비고</label><textarea name="remark">${Utils.escapeHtml(a.remark || '')}</textarea></div>
@@ -259,6 +252,14 @@ window.Panel = (() => {
           <button type="submit" class="btn btn-primary">자산상세내역 저장</button>
         </div>
       </form>
+      <div class="detail-grid" style="margin-top:14px;padding-top:12px;border-top:1px dashed var(--border-strong);">
+        <div class="detail-item"><div class="k">부실분류 <span style="font-weight:400;">(위원회 이력에서 반영)</span></div><div class="v">${Utils.escapeHtml(a.impair || '-')}</div></div>
+        <div class="detail-item"><div class="k">최근평가일 <span style="font-weight:400;">(평가이력에서 반영)</span></div><div class="v mono">${Utils.formatDate(a.last_eval_date)}</div></div>
+        <div class="detail-item"><div class="k">평가금액 <span style="font-weight:400;">(평가이력에서 반영)</span></div><div class="v mono">${Utils.formatKRW(a.eval_amount)}</div></div>
+        <div class="detail-item"><div class="k">평가적용종료일 <span style="font-weight:400;">(최근평가일+1년, 자동계산)</span></div><div class="v mono">${Utils.formatDate(a.apply_end)}</div></div>
+        <div class="detail-item"><div class="k">장부가</div><div class="v mono">${Utils.formatKRW(a.book_value)}</div></div>
+        <div class="detail-item"><div class="k">직전평가시행일</div><div class="v mono">${Utils.formatDate(a.prev_dt)}</div></div>
+      </div>
     `;
   }
 
@@ -270,7 +271,6 @@ window.Panel = (() => {
     const fields = Object.fromEntries(fd.entries());
     try {
       await Api.updateAsset(modalFund.fund_code, modalAsset.asset_name, fields);
-      await syncEvalHistorySnapshot(modalFund, modalAsset, fields);
       App.showToast('자산상세내역이 저장되었습니다.', 'success');
       await App.reloadData();
       const freshFund = state.data.fundMaster.find(f => f.fund_code === modalFund.fund_code);
@@ -351,19 +351,6 @@ window.Panel = (() => {
     `;
   }
 
-  function renderAdminAssetForm(a, idx) {
-    const statusOptions = Object.keys(CONFIG.EVAL_STATUS)
-      .map(s => `<option value="${s}" ${s === a.eval_status ? 'selected' : ''}>${s}</option>`).join('');
-    return `
-      <form class="admin-asset-form" data-asset-idx="${idx}" style="margin-top:8px;border-top:1px dashed var(--border-strong);padding-top:8px;">
-        <div class="form-row"><label>평가상태</label><select name="eval_status">${statusOptions}</select></div>
-        <div class="form-row"><label>평가금액</label><input type="number" name="eval_amount" value="${a.eval_amount || ''}"></div>
-        <div class="form-row"><label>최근평가일</label><input type="date" name="last_eval_date" value="${toInputDate(a.last_eval_date)}"></div>
-        <div class="btn-row"><button type="submit" class="btn btn-primary">자산 정보 저장</button></div>
-      </form>
-    `;
-  }
-
   function toInputDate(str) {
     const d = Utils.parseDate(str);
     if (!d) return '';
@@ -390,60 +377,6 @@ window.Panel = (() => {
         btn.disabled = false; btn.textContent = '저장';
       }
     });
-  }
-
-  function bindAdminAssetForms(fund) {
-    const assets = getAssets();
-    document.querySelectorAll('.admin-asset-form').forEach(form => {
-      form.addEventListener('submit', async e => {
-        e.preventDefault();
-        const idx = Number(form.dataset.assetIdx);
-        const asset = assets[idx];
-        const btn = form.querySelector('button[type="submit"]');
-        btn.disabled = true; btn.textContent = '저장 중…';
-        const fd = new FormData(form);
-        const fields = Object.fromEntries(fd.entries());
-        try {
-          await Api.updateAsset(fund.fund_code, asset.asset_name, fields);
-          await syncEvalHistorySnapshot(fund, asset, fields);
-          App.showToast('자산 정보가 저장되었습니다. (평가이력에도 반영됨)', 'success');
-          await App.reloadData();
-          open(fund.fund_code);
-        } catch (err) {
-          App.showToast(err.message, 'error');
-          btn.disabled = false; btn.textContent = '자산 정보 저장';
-        }
-      });
-    });
-  }
-
-  // 보유자산의 평가금액/최근평가일(=평가기준일)이 입력되면 평가이력(eval_history)에도 자동으로 반영한다.
-  // - 같은 펀드/자산에 대해 동일한 평가기준일의 이력이 이미 있으면 그 행을 갱신
-  // - 없으면 새 이력 행을 추가 (장부가 반영여부는 일단 공란(확인필요)으로 생성 - 실제 반영 여부는 평가이력 탭에서 관리자가 확인 후 Y/N으로 전환)
-  async function syncEvalHistorySnapshot(fund, asset, fields) {
-    if (!fields.eval_amount) return; // 평가금액이 입력된 경우에만 이력에 반영
-    const baseDate = fields.last_eval_date || '';
-    const existing = (state.data.evalHistory || []).find(h =>
-      h.fund_code === fund.fund_code &&
-      h.asset_name === asset.asset_name &&
-      h.eval_base_date === baseDate
-    );
-
-    if (existing) {
-      await Api.updateEvalHistory(
-        { fund_code: existing.fund_code, asset_name: existing.asset_name, eval_base_date: existing.eval_base_date },
-        { eval_amount: fields.eval_amount }
-      );
-    } else {
-      await Api.addEvalHistory({
-        fund_code: fund.fund_code,
-        asset_name: asset.asset_name,
-        eval_base_date: baseDate,
-        eval_amount: fields.eval_amount,
-        book_reflected: '',
-        notes: '대시보드 보유자산 정보 갱신 시 자동 생성'
-      });
-    }
   }
 
   function refreshIfOpen() {

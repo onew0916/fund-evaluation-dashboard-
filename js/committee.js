@@ -309,6 +309,9 @@ window.CommitteeView = (() => {
           if (fields.eval_conducted === 'Y' && fields.eval_amount) {
             await Admin.syncEvalHistoryFromCommittee(fields);
           }
+          if (fields.impair_yn === 'Y' && fields.impair_level) {
+            await Admin.syncImpairFromCommittee(fields);
+          }
           App.showToast('위원회 이력이 수정되었습니다.', 'success');
           await App.reloadData();
         } catch (err) {

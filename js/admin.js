@@ -485,7 +485,8 @@ window.Admin = (() => {
       const row = Object.fromEntries(fd.entries());
       try {
         await Api.addEvalHistory(row);
-        App.showToast('평가이력이 추가되었습니다.', 'success');
+        await syncAssetFromEvalHistory(row.fund_code, row.asset_name, row.eval_base_date, row.eval_amount);
+        App.showToast('평가이력이 추가되었습니다. (자산상세내역의 최근평가일/평가금액/평가적용종료일도 갱신됨)', 'success');
         form.reset();
         await App.reloadData();
       } catch (err) {
@@ -605,6 +606,9 @@ window.Admin = (() => {
         if (row.eval_conducted === 'Y' && row.eval_amount) {
           await syncEvalHistoryFromCommittee(row);
         }
+        if (row.impair_yn === 'Y' && row.impair_level) {
+          await syncImpairFromCommittee(row);
+        }
         App.showToast('위원회 개최이력이 추가되었습니다.', 'success');
         form.reset();
         evalAmountRow.style.display = 'none';
@@ -646,9 +650,34 @@ window.Admin = (() => {
             notes: `위원회 개최이력(${row.session_no || row.meeting_date}) 의결에 따른 평가 반영`
           });
         }
+        await syncAssetFromEvalHistory(fundCode, assetName, row.meeting_date, row.eval_amount);
       }
     }
   }
 
-  return { init, applyAdminUI, renderAdminView, syncEvalHistoryFromCommittee };
+  // eval_history에 값이 추가/갱신될 때마다 asset_detail의 최근평가일/평가금액/평가적용종료일도
+  // 함께 갱신한다 (평가적용종료일 = 최근평가일 + 1년, 자동계산). history.js의 이력 수정에서도 재사용.
+  async function syncAssetFromEvalHistory(fundCode, assetName, evalBaseDate, evalAmount) {
+    if (!fundCode || !assetName || !evalBaseDate) return;
+    const fields = { last_eval_date: evalBaseDate, apply_end: Utils.addOneYear(evalBaseDate) };
+    if (evalAmount) fields.eval_amount = evalAmount;
+    await Api.updateAsset(fundCode, assetName, fields);
+  }
+
+  // 위원회 이력에서 부실분류(impair_yn=Y)가 의결된 경우 대상 펀드×자산 전체의 impair 필드에 반영.
+  async function syncImpairFromCommittee(row) {
+    const fundCodes = (row.target_funds || '').split(',').map(s => s.trim()).filter(Boolean);
+    const assetNames = (row.target_assets || '').split(',').map(s => s.trim()).filter(Boolean);
+    if (!fundCodes.length || !assetNames.length) {
+      App.showToast('부실분류 의결 건이지만 대상 펀드/자산이 비어있어 자산상세내역에는 반영되지 않았습니다.', 'error');
+      return;
+    }
+    for (const fundCode of fundCodes) {
+      for (const assetName of assetNames) {
+        await Api.updateAsset(fundCode, assetName, { impair: row.impair_level || '' });
+      }
+    }
+  }
+
+  return { init, applyAdminUI, renderAdminView, syncEvalHistoryFromCommittee, syncAssetFromEvalHistory, syncImpairFromCommittee };
 })();

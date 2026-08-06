@@ -178,7 +178,8 @@ window.History = (() => {
             { fund_code: original.fund_code, asset_name: original.asset_name, eval_base_date: original.eval_base_date },
             fields
           );
-          App.showToast('평가이력이 수정되었습니다.', 'success');
+          await Admin.syncAssetFromEvalHistory(original.fund_code, original.asset_name, fields.eval_base_date, fields.eval_amount);
+          App.showToast('평가이력이 수정되었습니다. (자산상세내역도 갱신됨)', 'success');
           await App.reloadData();
         } catch (err) {
           App.showToast(err.message, 'error');
