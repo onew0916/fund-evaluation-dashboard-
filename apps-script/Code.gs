@@ -95,8 +95,12 @@ function getHeader(sheet) {
 function normalizeCellValue(v) {
   // 시트 셀이 '날짜' 형식으로 저장되어 있으면 getValues()가 Date 객체를 반환하므로,
   // 문자열 비교가 항상 가능하도록 yyyy-MM-dd 형태로 통일한다.
+  // 주의: Session.getScriptTimeZone()은 Apps Script 프로젝트 설정 타임존이라 스프레드시트
+  // 자체의 타임존과 다를 수 있고, 그 경우 날짜가 하루 밀려서 문자열이 달라져 행 매칭이
+  // 실패한다(클라이언트는 항상 스프레드시트 타임존 기준으로 CSV export된 날짜 문자열을 보냄).
+  // 그래서 반드시 스프레드시트 타임존을 기준으로 포맷해야 한다.
   if (v instanceof Date) {
-    return Utilities.formatDate(v, Session.getScriptTimeZone() || 'Asia/Seoul', 'yyyy-MM-dd');
+    return Utilities.formatDate(v, SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone(), 'yyyy-MM-dd');
   }
   return String(v === null || v === undefined ? '' : v).trim();
 }
