@@ -655,11 +655,16 @@ window.Admin = (() => {
     }
   }
 
-  // eval_history에 값이 추가/갱신될 때마다 asset_detail의 최근평가일/평가금액/평가적용종료일도
-  // 함께 갱신한다 (평가적용종료일 = 최근평가일 + 1년, 자동계산). history.js의 이력 수정에서도 재사용.
+  // eval_history에 값이 추가/갱신될 때마다 asset_detail의 최근평가일/직전평가시행일/평가금액/
+  // 평가적용종료일도 함께 갱신한다 (직전평가시행일=최근평가일, 평가적용종료일=최근평가일+1년,
+  // 자동계산). history.js의 이력 수정에서도 재사용.
   async function syncAssetFromEvalHistory(fundCode, assetName, evalBaseDate, evalAmount) {
     if (!fundCode || !assetName || !evalBaseDate) return;
-    const fields = { last_eval_date: evalBaseDate, apply_end: Utils.addOneYear(evalBaseDate) };
+    const fields = {
+      last_eval_date: evalBaseDate,
+      prev_dt: evalBaseDate,
+      apply_end: Utils.addOneYear(evalBaseDate),
+    };
     if (evalAmount) fields.eval_amount = evalAmount;
     await Api.updateAsset(fundCode, assetName, fields);
   }
