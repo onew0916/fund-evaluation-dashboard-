@@ -111,7 +111,7 @@ window.Panel = (() => {
         <div class="detail-item"><div class="k">투자자구분</div><div class="v">${Utils.escapeHtml(fund.investor_type || '-')}</div></div>
         <div class="detail-item"><div class="k">설정일</div><div class="v mono">${Utils.formatDate(fund.inception_date)}</div></div>
         <div class="detail-item"><div class="k">만기일</div><div class="v mono">${Utils.formatDate(fund.maturity_date)} (${Utils.ddayLabel(fund.maturity_date)})</div></div>
-        <div class="detail-item"><div class="k">최초설정액</div><div class="v mono">${Utils.formatKRW(fund.initial_commitment)}</div></div>
+        <div class="detail-item"><div class="k">기준일 원본액</div><div class="v mono">${Utils.formatKRW(fund.initial_commitment)}</div></div>
         <div class="detail-item"><div class="k">순자산가치(NAV)</div><div class="v mono">${Utils.formatKRW(fund.NAV)}</div></div>
       </div>
     `;
@@ -230,7 +230,7 @@ window.Panel = (() => {
           </div>
           <div class="form-row"><label>설정일</label><input type="date" name="inception_date" value="${toInputDate(fund.inception_date)}"></div>
           <div class="form-row"><label>만기일</label><input type="date" name="maturity_date" value="${toInputDate(fund.maturity_date)}"></div>
-          <div class="form-row"><label>최초설정액</label><input type="number" name="initial_commitment" value="${Utils.toNumber(fund.initial_commitment) || ''}"></div>
+          <div class="form-row"><label>기준일 원본액</label><input type="number" name="initial_commitment" value="${Utils.toNumber(fund.initial_commitment) || ''}"></div>
           <div class="form-row"><label>순자산가치(NAV)</label><input type="number" name="NAV" value="${Utils.toNumber(fund.NAV) || ''}"></div>
           <div class="btn-row">
             <button type="submit" class="btn btn-primary">저장</button>
