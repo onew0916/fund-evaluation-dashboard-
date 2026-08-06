@@ -46,6 +46,12 @@ window.Panel = (() => {
       if (e.target.closest('.jump-eval-input-btn')) jumpToEvalHistoryInput(modalFund, modalAsset);
       else if (e.target.closest('.jump-committee-input-btn')) jumpToCommitteeInput(modalFund, modalAsset);
     });
+    document.getElementById('assetModalBody').addEventListener('submit', e => {
+      if (e.target.classList.contains('asset-modal-detail-form')) {
+        e.preventDefault();
+        submitAssetModalDetailForm(e.target);
+      }
+    });
   }
 
   // 자산상세 모달에서 관리자 도구의 입력폼으로 이동하며 펀드/자산을 미리 채워준다.
@@ -195,9 +201,13 @@ window.Panel = (() => {
   function renderAssetModalBody() {
     if (!modalAsset) return;
     const body = document.getElementById('assetModalBody');
-    if (modalTab === 'detail') body.innerHTML = renderAssetModalDetail(modalAsset);
-    else if (modalTab === 'history') body.innerHTML = renderAssetModalHistory(modalFund, modalAsset);
-    else body.innerHTML = renderAssetModalCommittee(modalFund, modalAsset);
+    if (modalTab === 'detail') {
+      body.innerHTML = state.isAdmin ? renderAssetModalDetailForm(modalAsset) : renderAssetModalDetail(modalAsset);
+    } else if (modalTab === 'history') {
+      body.innerHTML = renderAssetModalHistory(modalFund, modalAsset);
+    } else {
+      body.innerHTML = renderAssetModalCommittee(modalFund, modalAsset);
+    }
   }
 
   function renderAssetModalDetail(a) {
@@ -218,6 +228,65 @@ window.Panel = (() => {
         <div class="detail-item full"><div class="k">비고</div><div class="v">${Utils.escapeHtml(a.remark || '-')}</div></div>
       </div>
     `;
+  }
+
+  // 관리자 모드에서 자산상세내역 탭 자체를 전체 필드 수정 폼으로 렌더링한다.
+  function renderAssetModalDetailForm(a) {
+    const statusOptions = Object.keys(CONFIG.EVAL_STATUS)
+      .map(s => `<option value="${s}" ${s === a.eval_status ? 'selected' : ''}>${s}</option>`).join('');
+    const listedOptions = ['', '시장성', '비시장성']
+      .map(v => `<option value="${v}" ${v === (a.listed || '') ? 'selected' : ''}>${v || '(미정)'}</option>`).join('');
+    const impairOptions = (CONFIG.IMPAIR_LEVELS || [])
+      .map(v => `<option value="${v}" ${v === (a.impair || '') ? 'selected' : ''}>${v}</option>`).join('');
+    return `
+      <form class="asset-modal-detail-form">
+        <div class="detail-grid">
+          <div class="form-row"><label>자산종류</label><input name="asset_type" value="${Utils.escapeHtml(a.asset_type || '')}"></div>
+          <div class="form-row"><label>시장성/비시장성</label><select name="listed">${listedOptions}</select></div>
+          <div class="form-row"><label>평가규칙</label><select name="eval_status">${statusOptions}</select></div>
+          <div class="form-row"><label>부실분류</label><select name="impair">${impairOptions}</select></div>
+          <div class="form-row"><label>최초취득일</label><input type="date" name="acq_date" value="${toInputDate(a.acq_date)}"></div>
+          <div class="form-row"><label>최근평가일</label><input type="date" name="last_eval_date" value="${toInputDate(a.last_eval_date)}"></div>
+          <div class="form-row"><label>장부가</label><input type="number" name="book_value" value="${Utils.toNumber(a.book_value) || ''}"></div>
+          <div class="form-row"><label>평가금액</label><input type="number" name="eval_amount" value="${Utils.toNumber(a.eval_amount) || ''}"></div>
+          <div class="form-row"><label>직전평가시행일</label><input type="date" name="prev_dt" value="${toInputDate(a.prev_dt)}"></div>
+          <div class="form-row"><label>평가적용종료일</label><input type="date" name="apply_end" value="${toInputDate(a.apply_end)}"></div>
+          <div class="form-row full"><label>대체평가근거</label><input name="alt_reason" value="${Utils.escapeHtml(a.alt_reason || '')}"></div>
+          <div class="form-row full"><label>대체평가방법</label><input name="alt_method" value="${Utils.escapeHtml(a.alt_method || '')}"></div>
+          <div class="form-row full"><label>비고</label><textarea name="remark">${Utils.escapeHtml(a.remark || '')}</textarea></div>
+        </div>
+        <div class="btn-row" style="margin-top:10px;">
+          <button type="submit" class="btn btn-primary">자산상세내역 저장</button>
+        </div>
+      </form>
+    `;
+  }
+
+  async function submitAssetModalDetailForm(form) {
+    if (!modalFund || !modalAsset) return;
+    const btn = form.querySelector('button[type="submit"]');
+    btn.disabled = true; btn.textContent = '저장 중…';
+    const fd = new FormData(form);
+    const fields = Object.fromEntries(fd.entries());
+    try {
+      await Api.updateAsset(modalFund.fund_code, modalAsset.asset_name, fields);
+      await syncEvalHistorySnapshot(modalFund, modalAsset, fields);
+      App.showToast('자산상세내역이 저장되었습니다.', 'success');
+      await App.reloadData();
+      const freshFund = state.data.fundMaster.find(f => f.fund_code === modalFund.fund_code);
+      const freshAsset = state.data.assetDetail.find(a => a.fund_code === modalFund.fund_code && a.asset_name === modalAsset.asset_name);
+      if (freshFund && freshAsset) {
+        modalFund = freshFund;
+        modalAsset = freshAsset;
+        renderAssetModalBody();
+      } else {
+        closeAssetModal();
+      }
+      refreshIfOpen();
+    } catch (err) {
+      App.showToast(err.message, 'error');
+      btn.disabled = false; btn.textContent = '자산상세내역 저장';
+    }
   }
 
   function historyReflectedFlag(r) {
