@@ -14,9 +14,17 @@
  */
 window.CommitteeView = (() => {
   let state = null;
+  let searchText = '';
 
   function init(appState) {
     state = appState;
+    const searchInput = document.getElementById('committeeSearchInput');
+    if (searchInput) {
+      searchInput.addEventListener('input', () => {
+        searchText = searchInput.value.trim();
+        render();
+      });
+    }
   }
 
   function fundLabel(code) {
@@ -102,6 +110,11 @@ window.CommitteeView = (() => {
     const container = document.getElementById('committeeContainer');
     const rows = [...state.data.committeeHistory]
       .map((r, idx) => ({ r, idx }))
+      .filter(({ r }) => {
+        if (!searchText) return true;
+        const codes = (r.target_funds || '').split(',').map(s => s.trim());
+        return codes.some(c => c.toLowerCase().includes(searchText.toLowerCase()));
+      })
       .sort((a, b) => {
         const da = Utils.parseDate(a.r.meeting_date), db = Utils.parseDate(b.r.meeting_date);
         if (!da && !db) return 0;
@@ -111,7 +124,7 @@ window.CommitteeView = (() => {
       });
 
     if (!rows.length) {
-      container.innerHTML = `<div class="empty-state">등록된 위원회 개최이력이 없습니다. 관리자 모드에서 추가할 수 있습니다.</div>`;
+      container.innerHTML = `<div class="empty-state">${searchText ? '검색 결과가 없습니다.' : '등록된 위원회 개최이력이 없습니다. 관리자 모드에서 추가할 수 있습니다.'}</div>`;
       return;
     }
 

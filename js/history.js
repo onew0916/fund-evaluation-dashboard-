@@ -10,9 +10,17 @@
  */
 window.History = (() => {
   let state = null;
+  let searchText = '';
 
   function init(appState) {
     state = appState;
+    const searchInput = document.getElementById('historySearchInput');
+    if (searchInput) {
+      searchInput.addEventListener('input', () => {
+        searchText = searchInput.value.trim();
+        render();
+      });
+    }
   }
 
   function pickYear(row) {
@@ -36,10 +44,13 @@ window.History = (() => {
     const { fundMaster, evalHistory } = state.data;
 
     // 평가이력이 있는 펀드 전체를 대상으로 묶는다.
-    const relevantCodes = new Set((evalHistory || []).map(h => h.fund_code));
+    let relevantCodes = [...new Set((evalHistory || []).map(h => h.fund_code))];
+    if (searchText) {
+      relevantCodes = relevantCodes.filter(code => code.toLowerCase().includes(searchText.toLowerCase()));
+    }
 
-    if (!relevantCodes.size) {
-      container.innerHTML = `<div class="empty-state">평가이력 데이터가 없습니다.</div>`;
+    if (!relevantCodes.length) {
+      container.innerHTML = `<div class="empty-state">${searchText ? '검색 결과가 없습니다.' : '평가이력 데이터가 없습니다.'}</div>`;
       return;
     }
 
