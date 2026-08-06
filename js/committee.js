@@ -112,8 +112,13 @@ window.CommitteeView = (() => {
       .map((r, idx) => ({ r, idx }))
       .filter(({ r }) => {
         if (!searchText) return true;
-        const codes = (r.target_funds || '').split(',').map(s => s.trim());
-        return codes.some(c => c.toLowerCase().includes(searchText.toLowerCase()));
+        const q = searchText.toLowerCase();
+        const codes = (r.target_funds || '').split(',').map(s => s.trim()).filter(Boolean);
+        return codes.some(c => {
+          if (c.toLowerCase().includes(q)) return true;
+          const fund = state.data.fundMaster.find(f => f.fund_code === c);
+          return fund && fund.fund_name.toLowerCase().includes(q);
+        });
       })
       .sort((a, b) => {
         const da = Utils.parseDate(a.r.meeting_date), db = Utils.parseDate(b.r.meeting_date);

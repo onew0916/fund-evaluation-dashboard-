@@ -46,7 +46,12 @@ window.History = (() => {
     // 평가이력이 있는 펀드 전체를 대상으로 묶는다.
     let relevantCodes = [...new Set((evalHistory || []).map(h => h.fund_code))];
     if (searchText) {
-      relevantCodes = relevantCodes.filter(code => code.toLowerCase().includes(searchText.toLowerCase()));
+      const q = searchText.toLowerCase();
+      relevantCodes = relevantCodes.filter(code => {
+        if (code.toLowerCase().includes(q)) return true;
+        const fund = fundMaster.find(f => f.fund_code === code);
+        return fund && fund.fund_name.toLowerCase().includes(q);
+      });
     }
 
     if (!relevantCodes.length) {
