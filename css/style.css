@@ -256,6 +256,10 @@ a { color: inherit; text-decoration: none; }
 .kpi-value .unit { font-size: 13px; font-weight: 500; color: var(--text-500); margin-left: 3px; }
 .kpi-foot { font-size: 11.5px; color: var(--text-500); margin-top: 4px; }
 
+.kpi-card.clickable { cursor: pointer; transition: box-shadow .15s, transform .1s; }
+.kpi-card.clickable:hover { box-shadow: 0 0 0 2px var(--kpi-accent, var(--blue)) inset; }
+.kpi-card.clickable.active { box-shadow: 0 0 0 2px var(--kpi-accent, var(--blue)) inset; }
+
 /* ---------- 필터 바 ---------- */
 .filter-bar {
   display: flex;

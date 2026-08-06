@@ -17,8 +17,25 @@ window.Dashboard = (() => {
         document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
         chip.classList.add('active');
         state.filterStatus = chip.dataset.filter;
+        state.deadlineOnly = false;
         render();
       });
+    });
+
+    // 외부평가 대상 자산 / 기한임박 자산 KPI 카드를 클릭하면 해당 조건으로 테이블을 필터링한다.
+    document.getElementById('kpiRow').addEventListener('click', e => {
+      const card = e.target.closest('.kpi-card[data-kpi]');
+      if (!card) return;
+      if (card.dataset.kpi === 'ext') {
+        state.filterStatus = '외부평가 대상';
+        state.deadlineOnly = false;
+        document.querySelectorAll('.chip').forEach(c => c.classList.toggle('active', c.dataset.filter === '외부평가 대상'));
+      } else if (card.dataset.kpi === 'deadline') {
+        state.filterStatus = 'ALL';
+        state.deadlineOnly = true;
+        document.querySelectorAll('.chip').forEach(c => c.classList.toggle('active', c.dataset.filter === 'ALL'));
+      }
+      render();
     });
 
     document.getElementById('fundTableBody').addEventListener('click', e => {
@@ -236,9 +253,14 @@ window.Dashboard = (() => {
     const rows = getAssetRows();
     const status = state.filterStatus || 'ALL';
     const q = (state.searchText || '').toLowerCase();
+    const warnDays = CONFIG.DDAY_WARNING_DAYS;
 
     const filtered = rows.filter(({ asset, fund }) => {
       if (status !== 'ALL' && asset.eval_status !== status) return false;
+      if (state.deadlineOnly) {
+        const d = Utils.diffDays(asset.apply_end);
+        if (d === null || d > warnDays) return false;
+      }
       if (q) {
         const hay = `${asset.fund_code} ${fund ? fund.fund_name : ''} ${fund ? fund.team : ''} ${asset.asset_name} ${asset.asset_type || ''}`.toLowerCase();
         if (!hay.includes(q)) return false;
@@ -265,12 +287,18 @@ window.Dashboard = (() => {
     const cards = [
       { label: '전체 펀드', value: total, unit: '개', accent: 'var(--blue)', foot: '관리 대상 전체 펀드 수' },
       { label: '비시장성 자산개수', value: unlistedCount, unit: '개', accent: 'var(--green)', foot: '시장성 없는 보유자산 수' },
-      { label: '외부평가 대상 자산', value: extCount, unit: '개', accent: 'var(--orange)', foot: '외부 전문기관 평가 필요' },
-      { label: '기한임박 자산', value: nearDeadline, unit: '개', accent: nearDeadline > 0 ? 'var(--red)' : 'var(--gray)', foot: `적용종료 D-${warnDays} 이내` }
+      {
+        label: '외부평가 대상 자산', value: extCount, unit: '개', accent: 'var(--orange)', foot: '외부 전문기관 평가 필요',
+        kpi: 'ext', active: state.filterStatus === '외부평가 대상' && !state.deadlineOnly
+      },
+      {
+        label: '기한임박 자산', value: nearDeadline, unit: '개', accent: nearDeadline > 0 ? 'var(--red)' : 'var(--gray)', foot: `적용종료 D-${warnDays} 이내`,
+        kpi: 'deadline', active: !!state.deadlineOnly
+      }
     ];
 
     document.getElementById('kpiRow').innerHTML = cards.map(c => `
-      <div class="kpi-card" style="--kpi-accent:${c.accent}">
+      <div class="kpi-card${c.kpi ? ' clickable' : ''}${c.active ? ' active' : ''}" style="--kpi-accent:${c.accent}" ${c.kpi ? `data-kpi="${c.kpi}"` : ''}>
         <div class="kpi-label">${c.label}</div>
         <div class="kpi-value">${c.value}<span class="unit">${c.unit}</span></div>
         <div class="kpi-foot">${c.foot}</div>

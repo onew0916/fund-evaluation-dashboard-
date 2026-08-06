@@ -5,6 +5,7 @@ window.App = (() => {
   const state = {
     data: { fundMaster: [], assetDetail: [], evalHistory: [], committeeHistory: [], config: {} },
     filterStatus: 'ALL',
+    deadlineOnly: false,
     searchText: '',
     sortKey: null,
     sortDir: 'asc',
